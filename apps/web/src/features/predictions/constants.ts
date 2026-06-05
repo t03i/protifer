@@ -1,0 +1,11 @@
+export type SubcellularLocation =
+  | 'Cell Membrane'
+  | 'Cytoplasm'
+  | 'Endoplasmic Reticulum'
+  | 'Golgi Apparatus'
+  | 'Vacuole'
+  | 'Mitochondrion'
+  | 'Nucleus'
+  | 'Peroxisome'
+  | 'Plastid'
+  | 'Extracellular'

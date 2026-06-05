@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" role="img" aria-label="Line graph of disorder score per residue with threshold">
+  <title>Intrinsic disorder prediction</title>
+  <g font-family="system-ui, sans-serif">
+    <rect width="320" height="180" rx="12" fill="currentColor" fill-opacity="0.04" />
+    <text x="16" y="26" font-size="12" font-weight="600" fill="currentColor">Disorder score</text>
+    <g transform="translate(16,44)">
+      <line x1="0" y1="100" x2="288" y2="100" stroke="currentColor" stroke-opacity="0.2" />
+      <line x1="0" y1="50" x2="288" y2="50" stroke="currentColor" stroke-opacity="0.15" stroke-dasharray="3 3" />
+      <text x="294" y="54" font-size="9" fill="currentColor" fill-opacity="0.5">0.5</text>
+      <path d="M0 82 L20 70 L40 58 L60 36 L80 28 L100 42 L120 70 L140 88 L160 92 L180 78 L200 54 L220 42 L240 64 L260 82 L288 74" stroke="#8b7ab5" stroke-width="2" fill="none" />
+      <path d="M0 82 L20 70 L40 58 L60 36 L80 28 L100 42 L120 70 L140 88 L160 92 L180 78 L200 54 L220 42 L240 64 L260 82 L288 74 L288 100 L0 100 Z" fill="#8b7ab5" fill-opacity="0.18" />
+    </g>
+    <g font-size="9" fill="currentColor" fill-opacity="0.6">
+      <text x="16" y="166">1</text>
+      <text x="304" y="166" text-anchor="end">L</text>
+    </g>
+  </g>
+</svg>

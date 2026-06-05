@@ -1,0 +1,11 @@
+# CI-only deps for the infra/triton/tests/ pytest suite (T0) and the
+# manifest-download smoke driver (T1). Pinned to major.minor, matching
+# Dockerfile.init where they overlap (httpx, onnx, tqdm). torch + numpy are
+# required by test_tmbed_viterbi.py; CPU torch comes from the pytorch index.
+--extra-index-url https://download.pytorch.org/whl/cpu
+pytest==8.3
+httpx==0.28
+onnx==1.21
+tqdm==4.67
+numpy==2.1
+torch==2.5.1+cpu

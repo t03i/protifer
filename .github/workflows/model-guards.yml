@@ -1,0 +1,39 @@
+name: Model guards
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/**
+      - model-repository/**
+      - .github/workflows/model-guards.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/**
+      - model-repository/**
+      - .github/workflows/model-guards.yml
+
+jobs:
+  model-guards:
+    name: Model archive guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Archive determinism
+        run: bash scripts/tests/test-build-model-archives.sh
+
+      - name: Manifest parity guard
+        run: bash scripts/tests/test-manifest-parity.sh
+
+      - name: Archive layout sentinel
+        run: |
+          FIX="$(mktemp -d)"
+          mkdir -p "$FIX/model-repository/_layout_probe/1"
+          printf 'name: "_layout_probe"\n' > "$FIX/model-repository/_layout_probe/config.pbtxt"
+          printf 'stub-onnx-bytes' > "$FIX/model-repository/_layout_probe/1/model.onnx"
+          DIST="$(mktemp -d)"
+          python3 scripts/build-model-archives.py \
+            --repo-root "$FIX" --folders _layout_probe --version 1 --output "$DIST"
+          bash scripts/tests/test-archive-layout.sh "$DIST/_layout_probe-v1.tar.gz"

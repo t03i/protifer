@@ -1,0 +1,15 @@
+{
+  "session": {
+    "id": "e2e-session",
+    "userId": "e2e-user",
+    "expiresAt": "2099-01-01T00:00:00.000Z"
+  },
+  "user": {
+    "id": "e2e-user",
+    "name": "E2E User",
+    "email": "e2e@test.local",
+    "emailVerified": true,
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+}

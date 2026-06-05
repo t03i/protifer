@@ -1,0 +1,27 @@
+name: Setup Playwright
+description: Install Bun + workspace deps + the Playwright Chromium browser.
+
+# Note: checkout stays in the calling workflow — a local composite action
+# (`uses: ./...`) is only resolvable after the repo is already checked out.
+
+inputs:
+  working-directory:
+    description: Directory to run `playwright install` from.
+    required: false
+    default: '.'
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: '1.3.11'
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Install Playwright Chromium
+      shell: bash
+      run: bunx playwright install --with-deps chromium
+      working-directory: ${{ inputs.working-directory }}

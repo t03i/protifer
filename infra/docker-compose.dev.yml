@@ -1,0 +1,311 @@
+# Self-contained dev stack — single host, mock-triton instead of GPU Triton.
+# Mirrors prod topology (postgres + redis + garage + workers + api-gateway)
+# behind a Caddy gateway so the dev URL surface stays close to prod.
+#
+# Run: docker compose -f infra/docker-compose.dev.yml --env-file infra/.env.dev up
+#
+# Caddy on :9090 → api-gateway:3001 (the FE dev server still runs out-of-stack
+# on :5173 and reverse-proxies to :9090 for /api/auth and /v1).
+name: protifer-dev
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '50m'
+    max-file: '5'
+
+x-garage-bucket: &garage-bucket embeddings
+
+x-worker-env: &worker-env
+  REDIS_HOST: redis
+  REDIS_PORT: '6381'
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-redispw}
+  GARAGE_ENDPOINT: http://garage:3900
+  GARAGE_REGION: garage
+  GARAGE_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-GK000000000000000000000000}
+  GARAGE_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+  GARAGE_BUCKET: *garage-bucket
+  TRITON_URL: ${TRITON_URL:-mock-triton:8001}
+
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:4941ef97aaa2633ce9808f7766f8b8d746dd039ce8c51ca6da185c3dc63ab579
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-protifer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-protifer}
+      POSTGRES_DB: ${POSTGRES_DB:-protifer}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    mem_limit: 512m
+    cpus: '0.5'
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-protifer}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine@sha256:84b07a33a16c4584d2933128ffb28b66ee4d3284ac9dc327a5170782d5cf5b27
+    command: redis-server --appendonly yes --port 6381 --requirepass ${REDIS_PASSWORD:-dev-redispw}
+    ports:
+      - '127.0.0.1:6381:6381'
+    volumes:
+      - redis_data:/data
+    mem_limit: 512m
+    cpus: '0.5'
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'redis-cli',
+          '-p',
+          '6381',
+          '-a',
+          '${REDIS_PASSWORD:-dev-redispw}',
+          '--no-auth-warning',
+          'ping',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  garage:
+    image: dxflrs/garage:v2.0.0@sha256:df71920098b2728cda596c4362cd6316345f6791240b2c2aff8aa34668f99b6d
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-dev-admin-token}
+      GARAGE_METRICS_TOKEN: ${GARAGE_METRICS_TOKEN:-dev-metrics-token}
+    ports:
+      - '127.0.0.1:3900:3900'
+      - '127.0.0.1:3903:3903'
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    mem_limit: 512m
+    cpus: '0.5'
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/garage', 'status']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    logging: *default-logging
+
+  garage-init:
+    build:
+      context: ./garage/garage-init
+    environment:
+      GARAGE_ADMIN_URL: http://garage:3903
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-dev-admin-token}
+      GARAGE_KEY_ID: ${AWS_ACCESS_KEY_ID:-GK000000000000000000000000}
+      GARAGE_KEY_SECRET: ${AWS_SECRET_ACCESS_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      GARAGE_BUCKET: *garage-bucket
+    depends_on:
+      garage:
+        condition: service_started
+    restart: 'no'
+    logging: *default-logging
+
+  mock-triton:
+    build:
+      context: ..
+      dockerfile: infra/mock-triton/Dockerfile
+    command: ['bun', '--watch', 'server.ts']
+    environment:
+      PORT: '8001'
+      HTTP_PORT: '8002'
+    ports:
+      - '127.0.0.1:8001:8001'
+      - '127.0.0.1:8002:8002'
+    volumes:
+      - ./mock-triton/server.ts:/app/infra/mock-triton/server.ts
+      - ../packages/triton-client/src:/app/packages/triton-client/src
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:8002/health']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  # Opt-in real Triton on CPU against the local model-repository.
+  # Inert unless `--profile cpu-triton` is passed; default `up` stays on mock-triton.
+  # Mirrors prod: stock Triton image + a CPU conda-pack execution env staged by an
+  # init step, instead of a deps-baked dev image.
+  triton-init:
+    profiles: ['cpu-triton']
+    # Build only the env-builder stage (host-arch native) and stage its tarball.
+    build:
+      context: ./triton
+      dockerfile: Dockerfile.init
+      target: env-builder
+    entrypoint:
+      - sh
+      - -c
+      - 'mkdir -p /models/_envs && cp /opt/protifer/cpu_py312.tar.gz /models/_envs/cpu_py312.tar.gz'
+    volumes:
+      - triton-env:/models/_envs
+    restart: 'no'
+    logging: *default-logging
+
+  triton:
+    profiles: ['cpu-triton']
+    # Stock image by tag → Docker resolves the host-arch manifest (native arm64 on
+    # Apple Silicon). Python-backend deps load from the staged execution env.
+    image: nvcr.io/nvidia/tritonserver:25.06-py3
+    command:
+      - tritonserver
+      - --model-repository=/models
+      - --model-control-mode=explicit
+      - --load-model=prot_t5_pipeline
+      - --log-verbose=0
+    # Only 8000 (HTTP) is host-published; 8001/8002 are reached as triton:8001
+    # over the compose network. mock-triton already owns host 8001/8002.
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - ../model-repository:/models:ro
+      - triton-env:/models/_envs:ro
+    depends_on:
+      triton-init:
+        condition: service_completed_successfully
+    mem_limit: 10g
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl -fsS http://localhost:8000/v2/health/ready || exit 1',
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: services/api-gateway/Dockerfile
+    command: ['bun', 'scripts/migrate.ts']
+    env_file:
+      - .env.dev
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://protifer:protifer@postgres:5432/protifer}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+    logging: *default-logging
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: services/api-gateway/Dockerfile
+    command: ['bun', '--watch', 'src/index.ts']
+    env_file:
+      - .env.dev
+    environment:
+      <<: *worker-env
+      NODE_ENV: development
+      PORT: '3001'
+      DATABASE_URL: ${DATABASE_URL:-postgresql://protifer:protifer@postgres:5432/protifer}
+      CORS_ORIGINS: 'http://localhost:5173'
+      BETTER_AUTH_BASE_URL: 'http://localhost:9090'
+    volumes:
+      - ../services/api-gateway/src:/app/services/api-gateway/src
+      - ../services/api-gateway/scripts:/app/services/api-gateway/scripts
+      - ../packages/shared/src:/app/packages/shared/src
+      - ../packages/triton-client/src:/app/packages/triton-client/src
+    depends_on:
+      redis:
+        condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      mock-triton:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: '1.0'
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  embedding-worker:
+    build:
+      context: ..
+      dockerfile: services/embedding-worker/Dockerfile
+    command: ['bun', '--watch', 'src/index.ts']
+    environment:
+      <<: *worker-env
+      NODE_ENV: development
+    volumes:
+      - ../services/embedding-worker/src:/app/services/embedding-worker/src
+      - ../packages/shared/src:/app/packages/shared/src
+      - ../packages/triton-client/src:/app/packages/triton-client/src
+    depends_on:
+      redis:
+        condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
+      mock-triton:
+        condition: service_healthy
+    mem_limit: 2g
+    cpus: '2.0'
+    restart: unless-stopped
+    logging: *default-logging
+
+  prediction-worker:
+    build:
+      context: ..
+      dockerfile: services/prediction-worker/Dockerfile
+    command: ['bun', '--watch', 'src/index.ts']
+    environment:
+      <<: *worker-env
+      NODE_ENV: development
+    volumes:
+      - ../services/prediction-worker/src:/app/services/prediction-worker/src
+      - ../packages/shared/src:/app/packages/shared/src
+      - ../packages/triton-client/src:/app/packages/triton-client/src
+    depends_on:
+      redis:
+        condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
+      mock-triton:
+        condition: service_healthy
+    mem_limit: 2g
+    cpus: '2.0'
+    restart: unless-stopped
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2-alpine@sha256:6d125e80883be8a2bef5f088c7535945b42cdbb8a0f5471bf36eaf18dc0638f1
+    ports:
+      - '127.0.0.1:9090:80'
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: '0.5'
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  redis_data:
+  garage_meta:
+  garage_data:
+  postgres_data:
+  triton-env:

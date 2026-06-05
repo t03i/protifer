@@ -1,0 +1,71 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# Phase 20 — local build output from scripts/build-model-archives.py
+dist/
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# Python caches
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+*.pyc
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+.turbo
+
+# git worktrees
+.worktrees
+.claude/worktrees
+
+**/*.env*
+infra/.env.dev
+# Example/template env files are committed so operators can copy them
+!infra/.env.dev.example
+
+# Local dev secrets — files mounted into containers via compose secrets:
+infra/secrets/*
+!infra/secrets/.gitkeep
+!infra/secrets/README.md
+
+# Claude Code (per-developer)
+.claude/agents/
+.claude/commands/
+.claude/hooks/
+.claude/settings.json
+
+# k6 load test local output
+tests/load/*.json
+tests/load/*.csv
+k6-*-summary.json
+.claude/scheduled_tasks.lock

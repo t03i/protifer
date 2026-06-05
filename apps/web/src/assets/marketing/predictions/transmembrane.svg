@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" role="img" aria-label="Transmembrane topology diagram with helices crossing a lipid bilayer">
+  <title>Transmembrane topology prediction</title>
+  <g font-family="system-ui, sans-serif">
+    <rect width="320" height="180" rx="12" fill="currentColor" fill-opacity="0.04" />
+    <text x="16" y="26" font-size="12" font-weight="600" fill="currentColor">Transmembrane topology</text>
+    <g>
+      <rect x="16" y="60" width="288" height="10" fill="#e4c07a" fill-opacity="0.55" />
+      <rect x="16" y="108" width="288" height="10" fill="#e4c07a" fill-opacity="0.55" />
+      <text x="22" y="55" font-size="9" fill="currentColor" fill-opacity="0.7">outside</text>
+      <text x="22" y="132" font-size="9" fill="currentColor" fill-opacity="0.7">inside</text>
+    </g>
+    <g stroke-width="6" stroke-linecap="round" fill="none">
+      <line x1="50" y1="44" x2="50" y2="134" stroke="#c66d4b" />
+      <line x1="100" y1="134" x2="100" y2="44" stroke="#c66d4b" />
+      <line x1="160" y1="44" x2="160" y2="134" stroke="#c66d4b" />
+      <line x1="220" y1="134" x2="220" y2="44" stroke="#c66d4b" />
+      <line x1="275" y1="44" x2="275" y2="134" stroke="#c66d4b" />
+    </g>
+    <g stroke="currentColor" stroke-opacity="0.35" fill="none" stroke-width="1.5" stroke-linecap="round">
+      <path d="M50 44 Q 75 30 100 44" />
+      <path d="M100 134 Q 130 150 160 134" />
+      <path d="M160 44 Q 190 30 220 44" />
+      <path d="M220 134 Q 247 150 275 134" />
+    </g>
+    <g font-size="9" fill="currentColor" fill-opacity="0.6">
+      <text x="16" y="166">N-term</text>
+      <text x="304" y="166" text-anchor="end">C-term</text>
+    </g>
+  </g>
+</svg>

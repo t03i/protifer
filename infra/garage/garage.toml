@@ -1,0 +1,24 @@
+metadata_dir = "/var/lib/garage/meta"
+data_dir     = "/var/lib/garage/data"
+db_engine    = "lmdb"
+replication_factor = 1
+compression_level  = 2
+
+rpc_bind_addr   = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret      = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[s3_api]
+s3_region    = "garage"
+api_bind_addr = "[::]:3900"
+
+[admin]
+# Bind in-container on all interfaces; host-side loopback restriction is
+# enforced by the consuming compose's port mapping ('127.0.0.1:3903:3903'
+# in prod, no host binding in dev/test).
+# Env vars (GARAGE_ADMIN_TOKEN, GARAGE_METRICS_TOKEN, GARAGE_RPC_SECRET)
+# override the literals here at runtime.
+api_bind_addr = "[::]:3903"
+admin_token   = "override-via-env"
+metrics_token = "override-via-env"
+metrics_require_token = true

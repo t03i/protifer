@@ -1,0 +1,16 @@
+{
+  "projectName": "lambdapp",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "bun",
+  "includeExamples": false,
+  "tailwind": true,
+  "addOnOptions": {},
+  "envVarValues": {},
+  "git": true,
+  "routerOnly": true,
+  "version": 1,
+  "addOns": true,
+  "framework": "react-cra",
+  "chosenAddOns": ["eslint", "shadcn", "tanstack-query"]
+}

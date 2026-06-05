@@ -1,0 +1,28 @@
+{
+  "name": "@protifer/prediction-worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "@protifer/shared": "workspace:*",
+    "@protifer/triton-client": "workspace:*",
+    "@protifer/worker-bootstrap": "workspace:*",
+    "pino": "^9.3.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@protifer/eslint-config": "workspace:*",
+    "@types/node": "^22.10.2",
+    "pino-pretty": "^11.2.1",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  }
+}

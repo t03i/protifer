@@ -1,0 +1,159 @@
+# Owned by protifer (monorepo). Validated by promtool in CI; synced to the
+# Grafana Cloud Mimir ruler (`mimirtool rules sync --namespace protifer`) on
+# every merge to main. No fleet-private detail (hosts, paths, URLs) belongs
+# in this file.
+#
+# Restart tolerance: bullmq_* counters/histograms live in the gateway process
+# and reset on restart — pipeline exprs use rate()/increase() with `for:`
+# durations so resets cannot fire alerts.
+groups:
+  - name: app
+    rules:
+      - alert: TritonInferenceFailureRate
+        expr: |
+          sum(rate(nv_inference_request_failure[5m]))
+          /
+          sum(rate(nv_inference_request_success[5m]) + rate(nv_inference_request_failure[5m])) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          app: protifer
+        annotations:
+          summary: 'protifer: Triton inference failure rate >1%'
+          description: |
+            Triton is failing >1% of inference requests over 5m.
+            Check Triton logs (docker compose logs triton on the app-tier host);
+            check GPU health (nvidia-smi); check model file integrity in
+            the protifer-app_triton_model_repo named volume.
+
+      - alert: GpuUnderutilizedAtLoad
+        expr: avg(nv_gpu_utilization) < 20 and sum(rate(nv_inference_count[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: GPU <20% util while inference rate >0'
+          description: |
+            Inference is happening but the A10 is barely loaded. Check
+            instance_group config in model-repository/*/config.pbtxt;
+            check CUDA driver version; check Triton concurrency settings.
+
+      - alert: GpuSustainedHighUtilization
+        expr: avg(nv_gpu_utilization) > 95
+        for: 5m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: GPU sustained >95% utilization'
+          description: |
+            Sustained GPU saturation. Check request rate; check worker
+            concurrency cap in services/*-worker/; check whether BullMQ
+            backpressure is engaging.
+
+      - alert: GarageDiskHigh
+        expr: |
+          (1 - garage_local_disk_avail{volume="data"} / garage_local_disk_total{volume="data"}) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: Garage data volume >80% full'
+          description: |
+            Garage is >80% full on the data volume. Run
+            docker system df on the state-tier host; purge stale embeddings/predictions;
+            expand the ZFS dataset or rotate storage.
+
+  - name: pipeline
+    rules:
+      - alert: PredictionJobStalled
+        expr: bullmq_stale_children_jobs > 0
+        for: 10m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: {{ $value }} prediction job(s) stuck in waiting-children'
+          description: |
+            Prediction jobs have sat in waiting-children beyond the staleness
+            threshold (FAIL-04): the embedding parent neither completed nor
+            cascaded a failure. Check bullmq_stale_children_oldest_seconds in
+            Grafana Cloud for the oldest age; check embedding-worker logs
+            (docker compose logs embedding-worker on the app-tier host); use
+            Bull Board (/admin/queues) to retry or clean the stuck flow.
+
+      - alert: HighJobFailureRate
+        # A cascaded child failure increments the counter on BOTH queues
+        # (root class on embedding, embedding_cascade on prediction) —
+        # excluding the cascade class counts each root cause once.
+        expr: |
+          sum by (queue) (increase(bullmq_job_failures_total{reason_class!="embedding_cascade"}[10m])) > 3
+        for: 5m
+        labels:
+          severity: critical
+          app: protifer
+        annotations:
+          summary: 'protifer: elevated job failures on {{ $labels.queue }} queue'
+          description: |
+            More than 3 jobs failed on the {{ $labels.queue }} queue within
+            10m (embedding_cascade excluded — those duplicate a root failure
+            already counted on the embedding queue). Break down by
+            reason_class in Grafana Cloud (bullmq_job_failures_total):
+            triton_unavailable → check Triton (docker compose logs triton);
+            worker_oom → check worker memory limits; other spiking → inspect
+            failed jobs in Bull Board (/admin/queues).
+
+      - alert: QueueBacklogGrowing
+        expr: sum by (queue) (bullmq_queue_jobs{state="waiting"}) > 50
+        for: 15m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: {{ $labels.queue }} queue backlog >50 waiting for 15m'
+          description: |
+            The {{ $labels.queue }} queue is not draining. Check worker health
+            (docker compose ps / logs on the app-tier host); check GPU
+            utilization in Grafana Cloud; check whether request shedding is
+            engaging (requests_shed_total). Sustained backlog with healthy
+            workers means demand exceeds capacity.
+
+      - alert: HighJobLatency
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(bullmq_job_total_duration_seconds_bucket{queue="prediction"}[15m]))) > 1200
+        for: 10m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: p95 end-to-end prediction latency >20m'
+          description: |
+            Users are waiting >20 minutes (p95) for prediction results.
+            Compare bullmq_job_wait_duration_seconds vs
+            bullmq_job_processing_duration_seconds in Grafana Cloud: high wait
+            → backlog/capacity (see QueueBacklogGrowing); high processing →
+            Triton or worker slowness (docker compose logs on the app-tier
+            host).
+
+  - name: cardinality
+    rules:
+      - alert: ActiveSeriesNearFreeTierCap
+        # The Mimir ruler evaluates against this tenant only — the
+        # grafanacloud-usage data source is not reachable from rules, so we
+        # count our own active series. Cross-check against the Billing/Usage
+        # dashboard during provisioning.
+        expr: count({__name__=~".+"}) > 8000
+        for: 30m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: active series >8000 of 10k free-tier cap'
+          description: |
+            Active series are approaching the Grafana Cloud free-tier cap
+            (10k); ingestion throttles beyond it. Reduce cardinality: the
+            gateway HTTP histogram labels (method/route/status) are the
+            biggest lever; check for label explosions in recently added
+            metrics (topk(10, count by (__name__)({__name__=~".+"}))).

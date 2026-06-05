@@ -1,0 +1,27 @@
+{
+  "name": "@protifer/worker-bootstrap",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@protifer/shared": "workspace:*",
+    "@protifer/triton-client": "workspace:*",
+    "@sentry/node": "^10.50.0",
+    "pino": "^9.3.2"
+  },
+  "devDependencies": {
+    "@protifer/eslint-config": "workspace:*",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  }
+}

@@ -1,0 +1,17 @@
+# .prettierignore
+node_modules
+dist
+.tsbuildinfo
+*.lock
+coverage
+
+out
+model-repository
+
+# Generated; rewritten by `bun run flags:docs`
+docs/ops/flags.md
+.**
+!.husky/
+!.husky/**
+!.github
+!.github/**

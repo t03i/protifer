@@ -1,0 +1,49 @@
+name: Weekly Load Tests
+
+on:
+  schedule:
+    - cron: '0 2 * * 1' # 02:00 UTC Monday — weekly off-peak run
+  workflow_dispatch: # Manual trigger per Claude's discretion (RESEARCH recommendation)
+
+permissions:
+  contents: read
+
+jobs:
+  load-tests:
+    name: k6 Load Tests (Production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install k6 (Go binary)
+        # LOAD-01: Go binary install. Never `bun add k6` — npm package is a dummy stub.
+        uses: grafana/setup-k6-action@v1
+
+      - name: Verify k6 binary
+        run: k6 version
+
+      - name: Run rate limiter load test (LOAD-02)
+        run: k6 run --out json=k6-rate-limiter-summary.json tests/load/rate-limiter.js
+        env:
+          PROD_GATEWAY_URL: ${{ secrets.PROD_GATEWAY_URL }}
+          LOAD_TEST_FREE_BEARER: ${{ secrets.LOAD_TEST_FREE_BEARER }}
+
+      - name: Run throughput baseline load test (LOAD-03)
+        # Run even if rate-limiter step failed, so we always capture a baseline artifact
+        if: ${{ !cancelled() }}
+        run: k6 run --out json=k6-throughput-summary.json tests/load/throughput.js
+        env:
+          PROD_GATEWAY_URL: ${{ secrets.PROD_GATEWAY_URL }}
+          LOAD_TEST_PRO_BEARER: ${{ secrets.LOAD_TEST_PRO_BEARER }}
+
+      - name: Upload k6 summaries
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: k6-load-test-results
+          path: k6-*-summary.json
+          retention-days: 30
+          if-no-files-found: warn

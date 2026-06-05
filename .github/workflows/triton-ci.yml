@@ -1,0 +1,224 @@
+name: Triton CI
+
+# Tiered verification of the Triton init + boot path (capability:
+# triton-ci-verification). T0/T1 are change-gated and cheap; T2 boots real
+# Triton and runs on schedule / manual dispatch only.
+on:
+  pull_request:
+    paths:
+      - 'infra/triton/**'
+      - 'infra/garage/garage-init/**'
+      - 'model-repository/**'
+      - 'scripts/build-model-archives.py'
+      - 'infra/docker-compose.dev.yml'
+      - '.github/workflows/triton-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/triton/**'
+      - 'infra/garage/garage-init/**'
+      - 'model-repository/**'
+      - 'scripts/build-model-archives.py'
+      - 'infra/docker-compose.dev.yml'
+      - '.github/workflows/triton-ci.yml'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Model release tag for the real-boot job (T2)'
+        default: 'models-v1.0.0'
+        required: false
+  # Enable the weekly schedule once T2 has had a green workflow_dispatch run
+  # on a real runner (task 3.7):
+  # schedule:
+  #   - cron: '0 4 * * 1' # 04:00 UTC Monday — weekly
+
+permissions:
+  contents: read
+  pull-requests: read # dorny/paths-filter reads the PR's changed-file list via the API
+
+jobs:
+  # Per-area change detection so the triton tiers gate on the triton path set
+  # and the garage-init build gates only on its own context.
+  changes:
+    name: Detect changed areas
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      triton: ${{ steps.filter.outputs.triton }}
+      garage: ${{ steps.filter.outputs.garage }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            triton:
+              - 'infra/triton/**'
+              - 'model-repository/**'
+              - 'scripts/build-model-archives.py'
+              - 'infra/docker-compose.dev.yml'
+              - '.github/workflows/triton-ci.yml'
+            garage:
+              - 'infra/garage/garage-init/**'
+
+  # T0 — init logic. The existing pytest suite never ran in CI before this.
+  init-tests:
+    name: T0 — init unit tests
+    needs: changes
+    if: needs.changes.outputs.triton == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test deps
+        run: pip install -r infra/triton/requirements-dev.txt
+      - name: Run pytest suite
+        run: pytest infra/triton/tests/
+
+  # T0 — triton-init image build verification (build only, no push).
+  init-image-triton:
+    name: T0 — build triton-init image
+    needs: changes
+    if: needs.changes.outputs.triton == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: infra/triton
+          file: infra/triton/Dockerfile.init
+          push: false
+          cache-from: type=gha,scope=protifer-triton-init
+          cache-to: type=gha,mode=max,scope=protifer-triton-init
+          provenance: false
+
+  # T0 — garage-init image build verification, gated on its own context.
+  init-image-garage:
+    name: T0 — build garage-init image
+    needs: changes
+    if: needs.changes.outputs.garage == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: infra/garage/garage-init
+          file: infra/garage/garage-init/Dockerfile
+          push: false
+          cache-from: type=gha,scope=protifer-garage-init
+          cache-to: type=gha,mode=max,scope=protifer-garage-init
+          provenance: false
+
+  # T1 — manifest download smoke against a local HTTP server (no Triton image).
+  manifest-smoke:
+    name: T1 — manifest download smoke
+    needs: changes
+    if: needs.changes.outputs.triton == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install init deps
+        run: pip install -r infra/triton/requirements-dev.txt
+      - name: Run manifest-download smoke
+        working-directory: infra/triton/tests
+        run: python smoke_manifest_download.py
+
+  # T2 — real Triton boot on CPU against the published model release.
+  # Schedule + manual dispatch only; never on the PR critical path.
+  # Requires the release assets to be publicly fetchable: init is auth-less by
+  # design, so this passes only once t03i/protifer is public (issue #155).
+  real-boot:
+    name: T2 — real Triton boot (CPU)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.release_tag || 'models-v1.0.0' }}
+      MODEL_MANIFEST_URL: https://github.com/t03i/protifer/releases/download/${{ github.event.inputs.release_tag || 'models-v1.0.0' }}/models.v1.json
+      TRITON_IMAGE: nvcr.io/nvidia/tritonserver:25.06-py3
+    steps:
+      - name: Free disk space
+        # Reclaim ~25-30 GB before pulling the ~15 GB Triton image + ~8.9 GB repo.
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+      - name: Disk before
+        run: df -h /
+
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install httpx==0.28
+
+      - name: Build triton-init image
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/triton
+          file: infra/triton/Dockerfile.init
+          push: false
+          load: true
+          tags: protifer-triton-init:ci
+          cache-from: type=gha,scope=protifer-triton-init
+          provenance: false
+
+      - name: Init model repository from published release
+        run: |
+          mkdir -p "$PWD/models-vol"
+          docker run --rm \
+            -e MODEL_MANIFEST_URL="$MODEL_MANIFEST_URL" \
+            -e MODEL_REPOSITORY_PATH=/models \
+            -e REQUIRE_NVIDIA=false \
+            -v "$PWD/models-vol:/models" \
+            protifer-triton-init:ci
+
+      - name: Assert init populated the repository
+        run: |
+          set -euo pipefail
+          test -f "$PWD/models-vol/_envs/cpu_py312.tar.gz" \
+            || { echo "execution env not staged"; exit 1; }
+          ls -la "$PWD/models-vol"
+
+      - name: Boot stock Triton on CPU
+        run: |
+          docker run -d --name triton \
+            -p 8000:8000 -p 8002:8002 \
+            -v "$PWD/models-vol:/models" \
+            "$TRITON_IMAGE" \
+            tritonserver --model-repository=/models --model-control-mode=explicit
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/v2/health/ready; then
+              echo "triton ready"; exit 0
+            fi
+            sleep 5
+          done
+          echo "triton did not become ready"; docker logs triton; exit 1
+
+      - name: Every manifest model reaches READY
+        env:
+          TRITON_URL: http://127.0.0.1:8000
+        run: python infra/triton/tests/triton_ready_check.py
+
+      - name: Triton logs (always)
+        if: always()
+        run: docker logs triton || true
+      - name: Teardown
+        if: always()
+        run: docker rm -f triton || true
+      - name: Disk after
+        if: always()
+        run: df -h /

@@ -1,0 +1,81 @@
+name: "tmbed"
+platform: "ensemble"
+max_batch_size: 16
+
+input [
+  {
+    name: "ensemble_input"
+    data_type: TYPE_FP32
+    dims: [ -1, 1024 ]
+  },
+  {
+    name: "mask"
+    data_type: TYPE_FP32
+    dims: [ -1 ]
+  }
+]
+
+output [
+  {
+    name: "labels"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  },
+  {
+    name: "probabilities"
+    data_type: TYPE_FP32
+    dims: [ -1, 5 ]
+  }
+]
+
+ensemble_scheduling {
+  step [
+    {
+      model_name: "_tmbed_cv0"
+      model_version: -1
+      input_map { key: "input" value: "ensemble_input" }
+      input_map { key: "mask"  value: "mask" }
+      output_map { key: "output" value: "internal_output_0" }
+    },
+    {
+      model_name: "_tmbed_cv1"
+      model_version: -1
+      input_map { key: "input" value: "ensemble_input" }
+      input_map { key: "mask"  value: "mask" }
+      output_map { key: "output" value: "internal_output_1" }
+    },
+    {
+      model_name: "_tmbed_cv2"
+      model_version: -1
+      input_map { key: "input" value: "ensemble_input" }
+      input_map { key: "mask"  value: "mask" }
+      output_map { key: "output" value: "internal_output_2" }
+    },
+    {
+      model_name: "_tmbed_cv3"
+      model_version: -1
+      input_map { key: "input" value: "ensemble_input" }
+      input_map { key: "mask"  value: "mask" }
+      output_map { key: "output" value: "internal_output_3" }
+    },
+    {
+      model_name: "_tmbed_cv4"
+      model_version: -1
+      input_map { key: "input" value: "ensemble_input" }
+      input_map { key: "mask"  value: "mask" }
+      output_map { key: "output" value: "internal_output_4" }
+    },
+    {
+      model_name: "_tmbed_viterbi"
+      model_version: -1
+      input_map { key: "output_0" value: "internal_output_0" }
+      input_map { key: "output_1" value: "internal_output_1" }
+      input_map { key: "output_2" value: "internal_output_2" }
+      input_map { key: "output_3" value: "internal_output_3" }
+      input_map { key: "output_4" value: "internal_output_4" }
+      input_map { key: "mask"     value: "mask" }
+      output_map { key: "labels"        value: "labels" }
+      output_map { key: "probabilities" value: "probabilities" }
+    }
+  ]
+}

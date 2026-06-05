@@ -1,0 +1,16 @@
+{
+  "name": "@protifer/scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "models:build": "python3 build-model-archives.py --version 1 --output dist/",
+    "models:publish": "python3 build-model-archives.py --version 1 --output dist/ --publish models-v1.0.0"
+  },
+  "dependencies": {
+    "@protifer/shared": "workspace:*",
+    "pino": "^9.3.2"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.5"
+  }
+}

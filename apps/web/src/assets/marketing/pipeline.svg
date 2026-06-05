@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" role="img" aria-label="Prediction pipeline: sequence input becomes embeddings, which produce per-residue and per-protein predictions">
+  <title>protifer prediction pipeline</title>
+  <desc>A sequence string on the left flows into a protein language model, which emits an embedding matrix. The embedding then feeds two downstream branches: per-residue predictions (secondary structure, disorder, binding, conservation, transmembrane, variants) and per-protein predictions (subcellular localisation, Gene Ontology terms, and 3D structure lookup).</desc>
+  <defs>
+    <marker id="pp-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+    </marker>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.5" font-family="system-ui, sans-serif" color="currentColor">
+    <g>
+      <rect x="20" y="110" width="140" height="60" rx="10" fill="currentColor" fill-opacity="0.08" />
+      <text x="90" y="134" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor" stroke="none">Sequence</text>
+      <text x="90" y="152" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="currentColor" stroke="none">MKTAY…</text>
+    </g>
+    <line x1="160" y1="140" x2="210" y2="140" marker-end="url(#pp-arrow)" />
+    <g>
+      <rect x="210" y="95" width="170" height="90" rx="10" fill="currentColor" fill-opacity="0.12" />
+      <text x="295" y="125" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor" stroke="none">pLM embedding</text>
+      <text x="295" y="145" text-anchor="middle" font-size="11" fill="currentColor" stroke="none">ProtT5-XL (UniRef50)</text>
+      <g transform="translate(225,155)" stroke="none" fill="currentColor" fill-opacity="0.6">
+        <rect width="7" height="16" rx="1" />
+        <rect x="10" width="7" height="16" rx="1" fill-opacity="0.3" />
+        <rect x="20" width="7" height="16" rx="1" fill-opacity="0.8" />
+        <rect x="30" width="7" height="16" rx="1" fill-opacity="0.5" />
+        <rect x="40" width="7" height="16" rx="1" />
+        <rect x="50" width="7" height="16" rx="1" fill-opacity="0.4" />
+        <rect x="60" width="7" height="16" rx="1" fill-opacity="0.9" />
+        <rect x="70" width="7" height="16" rx="1" fill-opacity="0.2" />
+        <rect x="80" width="7" height="16" rx="1" fill-opacity="0.7" />
+        <rect x="90" width="7" height="16" rx="1" fill-opacity="0.5" />
+        <rect x="100" width="7" height="16" rx="1" fill-opacity="0.8" />
+        <rect x="110" width="7" height="16" rx="1" fill-opacity="0.3" />
+        <rect x="120" width="7" height="16" rx="1" />
+      </g>
+    </g>
+    <line x1="380" y1="120" x2="440" y2="70" marker-end="url(#pp-arrow)" />
+    <line x1="380" y1="160" x2="440" y2="210" marker-end="url(#pp-arrow)" />
+    <g>
+      <rect x="440" y="30" width="420" height="90" rx="10" fill="currentColor" fill-opacity="0.06" />
+      <text x="650" y="54" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor" stroke="none">Per-residue predictions</text>
+      <g font-size="11" fill="currentColor" stroke="none">
+        <text x="460" y="80">• Secondary structure (DSSP3/8)</text>
+        <text x="460" y="98">• Transmembrane topology</text>
+        <text x="660" y="80">• Disorder &amp; flexibility</text>
+        <text x="660" y="98">• Binding sites</text>
+      </g>
+      <text x="650" y="114" text-anchor="middle" font-size="11" fill="currentColor" stroke="none">• Conservation · Variant effect (20×N)</text>
+    </g>
+    <g>
+      <rect x="440" y="170" width="420" height="90" rx="10" fill="currentColor" fill-opacity="0.06" />
+      <text x="650" y="194" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor" stroke="none">Per-protein predictions</text>
+      <g font-size="11" fill="currentColor" stroke="none">
+        <text x="460" y="220">• Subcellular localisation</text>
+        <text x="460" y="238">• Gene Ontology terms</text>
+        <text x="660" y="220">• 3D structure (AFDB / ColabFold)</text>
+        <text x="660" y="238">• Membrane association</text>
+      </g>
+    </g>
+  </g>
+</svg>

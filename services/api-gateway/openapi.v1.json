@@ -1,0 +1,630 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "protifer API",
+    "version": "1.0.0",
+    "description": "Two ways to authenticate:\n\n- **Session cookie** — [sign in with GitHub](/api/auth/sign-in/github) in this browser; subsequent requests include the cookie automatically. Best for interactive use.\n- **Bearer API key** — issue a key from `/settings/api-keys` and send `Authorization: Bearer <key>`. Best for programmatic / CI use."
+  },
+  "security": [
+    {
+      "cookieAuth": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "better-auth.session_token"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API key issued via Settings → API Keys (or `auth.api.createApiKey` server-side). Send as `Authorization: Bearer <key>`."
+      }
+    },
+    "schemas": {
+      "PredictionSubmitBody": {
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "example": "MKTVRQERLK"
+          },
+          "accession": {
+            "type": "string",
+            "example": "P04637",
+            "description": "Optional UniProt accession that produced the sequence. Used for display and logging."
+          }
+        },
+        "required": ["sequence"]
+      },
+      "PredictionPollResponse": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["complete"]
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/components/schemas/StoredPrediction"
+              },
+              "embeddingModel": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  }
+                },
+                "required": ["name", "version"]
+              },
+              "cachedAt": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "jobId", "result"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["failed"]
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "jobId", "error"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["queued", "processing", "not_found"]
+              },
+              "jobId": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "jobId"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "StoredPrediction": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [1]
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "enum": [
+                        "prott5_secondary_structure",
+                        "tmbed",
+                        "seth",
+                        "bindembed",
+                        "prott5_conservation",
+                        "light_attention_subcellular",
+                        "light_attention_membrane",
+                        "variation"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["name", "version"]
+                }
+              },
+              "outputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            },
+            "required": ["schemaVersion", "versions", "outputs"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "type": "number",
+                "enum": [2]
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "enum": [
+                        "prott5_secondary_structure",
+                        "tmbed",
+                        "seth",
+                        "bindembed",
+                        "prott5_conservation",
+                        "light_attention_subcellular",
+                        "light_attention_membrane",
+                        "variation"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["name", "version"]
+                }
+              },
+              "outputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "nullable": true
+                }
+              },
+              "modelErrors": {
+                "type": "object",
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            },
+            "required": ["schemaVersion", "versions", "outputs"]
+          }
+        ]
+      },
+      "EmbeddingSubmitBody": {
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "example": "MKTVRQERLK"
+          },
+          "accession": {
+            "type": "string",
+            "example": "P04637",
+            "description": "Optional UniProt accession that produced the sequence. Used for display and logging."
+          }
+        },
+        "required": ["sequence"]
+      },
+      "EmbeddingPollResponse": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["complete"]
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "vector": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "dimensions": {
+                "type": "number"
+              },
+              "embeddingModel": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  }
+                },
+                "required": ["name", "version"]
+              },
+              "cachedAt": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "jobId", "vector", "dimensions"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["failed"]
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "jobId", "error"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["queued", "processing", "not_found"]
+              },
+              "jobId": {
+                "type": "string"
+              }
+            },
+            "required": ["status", "jobId"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service liveness check (process is up)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["ok"]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["status", "timestamp"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionSubmitBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Prediction job accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string",
+                      "example": "pred_abc123"
+                    },
+                    "statusUrl": {
+                      "type": "string",
+                      "example": "/v1/predictions/pred_abc123"
+                    }
+                  },
+                  "required": ["jobId", "statusUrl"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Bad request"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Concurrent job limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Bad request"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request shed by admission controller. `code` is `OVERLOADED` (queue wait exceeds the plan SLO) or `UPSTREAM_DOWN` (embedding backend unresponsive). `Retry-After` header indicates recommended back-off in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Bad request"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/predictions/{jobId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "pred_abc123"
+            },
+            "required": true,
+            "name": "jobId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionPollResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Job in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionPollResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionPollResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/embeddings": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingSubmitBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Embedding job accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string",
+                      "example": "pred_abc123"
+                    },
+                    "statusUrl": {
+                      "type": "string",
+                      "example": "/v1/predictions/pred_abc123"
+                    }
+                  },
+                  "required": ["jobId", "statusUrl"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Bad request"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Concurrent job limit reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Bad request"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request shed by admission controller. `code` is `OVERLOADED` (queue wait exceeds the plan SLO) or `UPSTREAM_DOWN` (embedding backend unresponsive). `Retry-After` header indicates recommended back-off in seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "example": "Bad request"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "VALIDATION_ERROR"
+                    }
+                  },
+                  "required": ["error"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/embeddings/{jobId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "pred_abc123"
+            },
+            "required": true,
+            "name": "jobId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job complete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingPollResponse"
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Job in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingPollResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingPollResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

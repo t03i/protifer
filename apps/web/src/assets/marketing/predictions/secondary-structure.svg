@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" role="img" aria-label="Secondary structure track showing helix, strand and coil regions along a sequence">
+  <title>Secondary structure prediction</title>
+  <g font-family="system-ui, sans-serif">
+    <rect x="0" y="0" width="320" height="180" rx="12" fill="currentColor" fill-opacity="0.04" />
+    <text x="16" y="26" font-size="12" font-weight="600" fill="currentColor">Secondary structure (DSSP3)</text>
+    <g transform="translate(16,48)">
+      <rect width="288" height="18" rx="3" fill="currentColor" fill-opacity="0.08" />
+      <rect x="0" width="54" height="18" rx="3" fill="#c66d4b" />
+      <rect x="54" width="14" height="18" rx="2" fill="currentColor" fill-opacity="0.18" />
+      <rect x="68" width="42" height="18" rx="3" fill="#c66d4b" />
+      <rect x="110" width="18" height="18" rx="2" fill="currentColor" fill-opacity="0.18" />
+      <rect x="128" width="36" height="18" rx="3" fill="#6b8fb8" />
+      <rect x="164" width="20" height="18" rx="2" fill="currentColor" fill-opacity="0.18" />
+      <rect x="184" width="46" height="18" rx="3" fill="#c66d4b" />
+      <rect x="230" width="18" height="18" rx="2" fill="currentColor" fill-opacity="0.18" />
+      <rect x="248" width="40" height="18" rx="3" fill="#6b8fb8" />
+    </g>
+    <g transform="translate(16,90)" font-size="9" fill="currentColor">
+      <g>
+        <rect width="10" height="10" fill="#c66d4b" rx="2" />
+        <text x="16" y="9">Helix</text>
+      </g>
+      <g transform="translate(60,0)">
+        <rect width="10" height="10" fill="#6b8fb8" rx="2" />
+        <text x="16" y="9">Strand</text>
+      </g>
+      <g transform="translate(124,0)">
+        <rect width="10" height="10" fill="currentColor" fill-opacity="0.2" rx="2" />
+        <text x="16" y="9">Coil</text>
+      </g>
+    </g>
+    <g transform="translate(16,120)" stroke="currentColor" stroke-opacity="0.25" stroke-width="0.5">
+      <path d="M0 20 C 20 4, 40 36, 60 20 S 100 4, 120 20 S 160 36, 180 20 S 220 4, 240 20 S 280 36, 288 20" fill="none" />
+    </g>
+    <g font-size="9" fill="currentColor" fill-opacity="0.6" transform="translate(16,160)">
+      <text>residues</text>
+      <text x="272" text-anchor="end">L</text>
+    </g>
+  </g>
+</svg>

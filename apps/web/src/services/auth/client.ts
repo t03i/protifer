@@ -1,0 +1,7 @@
+import { apiKeyClient } from '@better-auth/api-key/client'
+import { createAuthClient } from 'better-auth/react'
+
+export const authClient = createAuthClient({
+  baseURL: import.meta.env['VITE_GATEWAY_URL'] || undefined,
+  plugins: [apiKeyClient()],
+})

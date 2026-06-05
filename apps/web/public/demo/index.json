@@ -1,0 +1,9 @@
+{
+  "accessions": {
+    "P04637": "e3ca60f18e3b6e98",
+    "P38398": "80d7199c8d1550a5",
+    "P12345": "7165784253ee6d52"
+  },
+  "sequences": ["MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKLVV"],
+  "suite": "de6ad819dd645445c3589e4f027cfb603e98ddd1dbcc20960c85754cd7be6e13"
+}

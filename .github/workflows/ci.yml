@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Typecheck, Lint, Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.11'
+
+      # Persist turbo's local task cache across runs so unchanged workspaces
+      # skip typecheck/lint entirely. restore-keys lets PRs reuse main's cache.
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Feature flags lint
+        run: bun run flags:lint
+
+      - name: Demo artifacts freshness
+        run: bun run check:demo-artifacts
+
+  monitoring-rules:
+    name: Validate alert rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: promtool check rules
+        run: |
+          docker run --rm \
+            -v "$PWD/infra/monitoring:/work" -w /work \
+            --entrypoint promtool \
+            prom/prometheus:v3.10.0 \
+            check rules protifer.rules.yml
+
+  rules-sync:
+    name: Sync alert rules to Grafana Cloud
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: monitoring-rules
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: mimirtool rules sync (namespace protifer)
+        env:
+          MIMIR_ADDRESS: ${{ secrets.GRAFANA_CLOUD_MIMIR_ADDRESS }}
+          MIMIR_TENANT_ID: ${{ secrets.GRAFANA_CLOUD_TENANT_ID }}
+          MIMIR_API_KEY: ${{ secrets.GRAFANA_CLOUD_RULES_TOKEN }}
+        run: |
+          # mimirtool reads the namespace from the rules file itself — prepend
+          # it here so the repo file stays pure Prometheus format for promtool.
+          printf 'namespace: protifer\n' | cat - infra/monitoring/protifer.rules.yml > /tmp/protifer-rules-ns.yml
+          docker run --rm \
+            -v /tmp/protifer-rules-ns.yml:/rules.yml:ro \
+            -e MIMIR_ADDRESS -e MIMIR_TENANT_ID -e MIMIR_API_KEY \
+            grafana/mimirtool:2.17.11 \
+            rules sync /rules.yml --namespaces protifer
+
+  docker-build:
+    name: Docker build verification
+    # PR-only: build.yml already builds these images on every main push.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - services/api-gateway
+          - services/embedding-worker
+          - services/prediction-worker
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build ${{ matrix.service }}
+        run: docker build -f ${{ matrix.service }}/Dockerfile .
+
+  backend-e2e:
+    name: Backend E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.11'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Start test stack
+        run: docker compose -f infra/docker-compose.test.yml -p protifer-test up -d --build --wait --wait-timeout 120
+
+      - name: Run backend E2E tests
+        run: bun run --filter @protifer/backend-e2e test
+
+      - name: Teardown test stack
+        if: always()
+        run: docker compose -f infra/docker-compose.test.yml -p protifer-test down -v
+
+  web-e2e:
+    name: Web E2E (Playwright)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-playwright
+        with:
+          working-directory: apps/web
+
+      - name: Run Playwright e2e tests
+        run: bun run test:e2e
+        working-directory: apps/web
