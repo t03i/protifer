@@ -19,7 +19,7 @@ jobs:
     name: Model archive guards
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Archive determinism
         run: bash scripts/tests/test-build-model-archives.sh
