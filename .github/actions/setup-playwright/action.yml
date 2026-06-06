@@ -13,9 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: '1.3.11'
+    - uses: oven-sh/setup-bun@v2 # bun version from package.json packageManager
 
     - name: Install dependencies
       shell: bash

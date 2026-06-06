@@ -47,8 +47,8 @@ jobs:
       triton: ${{ steps.filter.outputs.triton }}
       garage: ${{ steps.filter.outputs.garage }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -68,8 +68,8 @@ jobs:
     if: needs.changes.outputs.triton == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install test deps
@@ -84,9 +84,9 @@ jobs:
     if: needs.changes.outputs.triton == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: infra/triton
           file: infra/triton/Dockerfile.init
@@ -102,9 +102,9 @@ jobs:
     if: needs.changes.outputs.garage == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: infra/garage/garage-init
           file: infra/garage/garage-init/Dockerfile
@@ -120,8 +120,8 @@ jobs:
     if: needs.changes.outputs.triton == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install init deps
@@ -158,15 +158,15 @@ jobs:
       - name: Disk before
         run: df -h /
 
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install httpx==0.28
 
       - name: Build triton-init image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: infra/triton
           file: infra/triton/Dockerfile.init

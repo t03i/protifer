@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install k6 (Go binary)
         # LOAD-01: Go binary install. Never `bun add k6` — npm package is a dummy stub.
@@ -41,7 +41,7 @@ jobs:
 
       - name: Upload k6 summaries
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: k6-load-test-results
           path: k6-*-summary.json
