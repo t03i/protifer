@@ -141,3 +141,4 @@ jobs:
         with:
           release: ${{ github.sha }}
           set_commits: auto
+          ignore_missing: true
