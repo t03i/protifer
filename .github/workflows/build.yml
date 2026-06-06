@@ -120,8 +120,30 @@ jobs:
           git commit -m "deploy(${{ matrix.tier }}): bump images to ${{ github.sha }}"
           git push
 
-  # Announces the release to Sentry. Terminal + observability-only:
-  # failure cannot affect images, the bump, or the doco-cd rollout.
+
+  rules-sync:
+    name: Sync alert rules to Grafana Cloud
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: deploy
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: mimirtool rules sync (namespace protifer)
+        env:
+          MIMIR_ADDRESS: ${{ secrets.GRAFANA_CLOUD_MIMIR_ADDRESS }}
+          MIMIR_TENANT_ID: ${{ secrets.GRAFANA_CLOUD_TENANT_ID }}
+          MIMIR_API_KEY: ${{ secrets.GRAFANA_CLOUD_RULES_TOKEN }}
+        run: |
+          # mimirtool reads the namespace from the rules file itself — prepend
+          # it here so the repo file stays pure Prometheus format for promtool.
+          printf 'namespace: protifer\n' | cat - infra/monitoring/protifer.rules.yml > /tmp/protifer-rules-ns.yml
+          docker run --rm \
+            -v /tmp/protifer-rules-ns.yml:/rules.yml:ro \
+            -e MIMIR_ADDRESS -e MIMIR_TENANT_ID -e MIMIR_API_KEY \
+            grafana/mimirtool:2.17.11 \
+            rules sync /rules.yml --namespaces protifer
+
   notify-sentry-release:
     needs: bump-deploy-tags
     if: github.ref == 'refs/heads/main'
