@@ -1,0 +1,29 @@
+# env-builder: CPU conda-pack env for Triton's python backends. Python pinned to
+# 3.12.3 to match the tritonserver:25.06-py3 interpreter (no custom stub needed) —
+# move this in lockstep with the Triton image tag in deploy-app.
+#
+# build-model-artifact.py builds this --platform=linux/amd64 and extracts
+# /opt/protifer/cpu_py312.tar.gz into the artifact's _envs/. Single stage, no
+# runtime layer (relocated from the env-builder stage of Dockerfile.init).
+FROM mambaorg/micromamba:2.0.5-debian12-slim@sha256:8d0d4cad074afe3ac93b58dce88bd2659153d3fa6de3a6968f501710e8d3c832
+
+USER root
+ENV ENV_PREFIX=/opt/protifer/env
+
+RUN micromamba create -y -p ${ENV_PREFIX} -c conda-forge \
+        python=3.12.3 conda-pack && \
+    micromamba clean --all --yes
+
+# torch from the cpu index (~200 MiB vs ~2.5 GiB CUDA); rest from PyPI.
+RUN micromamba run -p ${ENV_PREFIX} pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch && \
+    micromamba run -p ${ENV_PREFIX} pip install --no-cache-dir \
+        transformers~=4.45 \
+        sentencepiece~=0.2 \
+        numpy \
+        protobuf~=4.25
+
+# --ignore-missing-files: pip upgrades conda's setuptools; the env is consistent.
+RUN micromamba run -p ${ENV_PREFIX} conda-pack --ignore-missing-files \
+        -p ${ENV_PREFIX} -o /opt/protifer/cpu_py312.tar.gz
