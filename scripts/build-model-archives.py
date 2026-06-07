@@ -22,6 +22,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -294,6 +295,26 @@ def generate_notes(output_dir: Path, version: str, commit: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def write_verified_manifest(
+    output_dir: Path, repo: str, tag: str, version: str, repo_root: Path
+) -> Path | None:
+    """Write models.v{version}.json self-referencing this release, then verify parity.
+
+    The manifest is built from the canonical folder set, each entry pointing at the
+    sibling archive asset in `tag`. Returns the manifest path, or None if the
+    folder-set / manifest parity check failed (caller turns that into exit 1).
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest = generate_manifest(repo, tag=tag, version=version, folders=V14_FOLDERS)
+    manifest_path = output_dir / f"models.v{version}.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    logger.info("Generated %s (%d entries)", manifest_path, len(manifest["downloads"]))
+    if verify_manifest(repo_root, manifest_path) != 0:
+        logger.error("Manifest parity check failed for %s", tag)
+        return None
+    return manifest_path
+
+
 def publish_release(
     output_dir: Path,
     tag: str,
@@ -309,27 +330,16 @@ def publish_release(
     Uses draft-then-publish so assets are uploaded atomically before the
     release is visible to consumers.
 
-    Generates `models.v{version}.json` from the canonical folder set (each entry
-    pointing at the sibling archive asset in this release), runs the manifest
-    parity check against it, and uploads it alongside the archives — so the
-    manifest and the archives it lists ship as one immutable release.
+    Generates the parity-checked `models.v{version}.json` and uploads it alongside
+    the archives — so the manifest and the archives it lists ship as one immutable
+    release.
 
     Returns 0 on success, 1 on failure.
     """
-    import tempfile
-
     repo_flags = ["--repo", repo]
 
-    # Generate the deploy manifest from the canonical folder set, self-referencing
-    # this release's archive assets, and write it into the output dir for upload.
-    manifest = generate_manifest(repo, tag=tag, version=version, folders=V14_FOLDERS)
-    manifest_path = output_dir / f"models.v{version}.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    logger.info("Generated %s (%d entries)", manifest_path, len(manifest["downloads"]))
-
-    # Fail the publish on folder-set / manifest drift before creating the release.
-    if verify_manifest(repo_root, manifest_path) != 0:
-        logger.error("Manifest parity check failed — not publishing %s", tag)
+    manifest_path = write_verified_manifest(output_dir, repo, tag, version, repo_root)
+    if manifest_path is None:
         return 1
 
     # Generate notes into a temp file
@@ -408,14 +418,8 @@ def publish_manifest_only(
 
     Returns 0 on success, 1 on failure.
     """
-    manifest = generate_manifest(repo, tag=tag, version=version, folders=V14_FOLDERS)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = output_dir / f"models.v{version}.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    logger.info("Generated %s (%d entries)", manifest_path, len(manifest["downloads"]))
-
-    if verify_manifest(repo_root, manifest_path) != 0:
-        logger.error("Manifest parity check failed — not uploading to %s", tag)
+    manifest_path = write_verified_manifest(output_dir, repo, tag, version, repo_root)
+    if manifest_path is None:
         return 1
 
     repo_flags = ["--repo", repo]
