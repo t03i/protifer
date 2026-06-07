@@ -42,11 +42,6 @@ jobs:
               dockerfile: services/prediction-worker/Dockerfile,
             }
           - {
-              image: protifer-triton-init,
-              context: infra/triton,
-              dockerfile: infra/triton/Dockerfile.init,
-            }
-          - {
               image: protifer-garage-init,
               context: infra/garage/garage-init,
               dockerfile: infra/garage/garage-init/Dockerfile,

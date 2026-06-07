@@ -3,7 +3,7 @@
 Dev/test compose stacks + the sources CI builds prod images from.
 
 - `docker-compose.{dev,test}.yml` — local stacks (mock-triton, garage, postgres, redis).
-- `triton/` — Triton serves on the stock `nvcr.io/nvidia/tritonserver` image (no project-built serving image). CI builds only `Dockerfile.init` (`init_models.py` + the baked CPU conda-pack execution env `cpu_py312.tar.gz`).
+- `triton/` — Triton serves on the stock `nvcr.io/nvidia/tritonserver` image (no project-built serving image). Its model repository is now a locally-built OCI artifact (`scripts/build-model-artifact.py`) pulled by a stock `oras` one-shot in the deploy repos; the CPU conda-pack execution env (`cpu_py312.tar.gz`) ships inside that artifact.
 - `garage/` — `garage.toml` + `garage-init/` used by the dev/test stacks; the init image is also built by CI for prod.
 - `postgres/seeds/` — dev seed SQL.
 
