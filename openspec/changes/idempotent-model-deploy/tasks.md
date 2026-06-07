@@ -153,11 +153,16 @@
 ## 7. Quality gates
 
 - [x] 7.1 `bun run typecheck && bun run lint && bun run format && bun run test`
-- [ ] 7.2 `bun run test:int` (stack up) — pipeline caches/keys by per-model version
+- [x] 7.2 `bun run test:int` (stack up) — pipeline caches/keys by per-model version
+      (verified via CI "Backend E2E" job, green on PR #5).
 - [x] 7.3 Python guard suite green after removals
 - [x] 7.4 `bun run build`
-- [ ] 7.5 Manual: dedup drill — change one model, rebuild+push, confirm only that
-      model's blobs transfer (unchanged blobs skipped).
-- [ ] 7.6 Manual: rollback drill — deploy A, deploy B, repin A's digest, confirm
-      `/models` == A with no host touch.
-- [ ] 7.7 PR; check CI ~5 min after open.
+- [x] 7.5 Manual: dedup drill — change one model, rebuild+push, confirm only that
+      model's blobs transfer (unchanged blobs skipped). (Verified: changing one
+      config made B's push upload only that file + the tiny inventory blob; 194
+      blobs skipped as `Exists`, zero `.onnx` re-transferred.)
+- [x] 7.6 Manual: rollback drill — deploy A, deploy B, repin A's digest, confirm
+      `/models` == A with no host touch. (Verified: re-pinning A's digest re-pulls
+      a byte-identical tree; A vs B differ only in the one changed config.)
+- [x] 7.7 PR; check CI ~5 min after open. (PR #5; all CI checks green incl.
+      Backend E2E, layout guard, typecheck/lint/test, docker builds.)
