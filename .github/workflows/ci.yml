@@ -66,16 +66,33 @@ jobs:
 
     strategy:
       matrix:
-        service:
-          - services/api-gateway
-          - services/embedding-worker
-          - services/prediction-worker
+        image:
+          - {
+              name: api-gateway,
+              dockerfile: services/api-gateway/Dockerfile,
+              context: .,
+            }
+          - {
+              name: embedding-worker,
+              dockerfile: services/embedding-worker/Dockerfile,
+              context: .,
+            }
+          - {
+              name: prediction-worker,
+              dockerfile: services/prediction-worker/Dockerfile,
+              context: .,
+            }
+          - {
+              name: garage-init,
+              dockerfile: infra/garage/garage-init/Dockerfile,
+              context: infra/garage/garage-init,
+            }
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build ${{ matrix.service }}
-        run: docker build -f ${{ matrix.service }}/Dockerfile .
+      - name: Build ${{ matrix.image.name }}
+        run: docker build -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
 
   backend-e2e:
     name: Backend E2E

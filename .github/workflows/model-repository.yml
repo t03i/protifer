@@ -1,0 +1,52 @@
+name: Model repository
+
+# Integrity checks for the checked-in Triton model repository: the layout guard
+# plus the decoder (Viterbi) python tests. "triton" here means model-repo /
+# decoder integrity, not the inference server (garage-init build-verify and the
+# service images live in ci.yml; image push lives in build.yml).
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/check-model-repository-layout.py
+      - model-repository/**
+      - infra/triton/**
+      - .github/workflows/model-repository.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/check-model-repository-layout.py
+      - model-repository/**
+      - infra/triton/**
+      - .github/workflows/model-repository.yml
+  workflow_dispatch:
+
+jobs:
+  layout-guard:
+    name: Model repository layout guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Check model repository layout
+        run: python3 scripts/check-model-repository-layout.py
+
+  decoder-tests:
+    name: Decoder python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install test deps
+        run: pip install -r infra/triton/requirements-dev.txt
+
+      - name: Run pytest suite
+        run: pytest infra/triton/tests/
