@@ -31,8 +31,6 @@ try {
 
 const logger = pino({ name: 'api-gateway', ...defaultPinoOptions() })
 
-// Resolve the served suite from the artifact inventory before boot. Fails loud
-// if the OCI config is unreachable — no stale fallback (Decision 3).
 let suite: Awaited<ReturnType<typeof loadSuiteForBoot>>
 try {
   suite = await loadSuiteForBoot(config.models)

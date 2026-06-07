@@ -32,6 +32,9 @@ INVENTORY_MEDIA_TYPE = "application/vnd.protifer.model-inventory.v1+json"
 ARTIFACT_TYPE = "application/vnd.protifer.model-repo.v1"
 DEFAULT_ORG = "<org>"
 DEFAULT_REPO = "model-repo"
+DEFAULT_IMAGE_SOURCE = "https://github.com/t03i/protifer"
+DEFAULT_IMAGE_LICENSES = "Apache-2.0"
+DEFAULT_IMAGE_DESCRIPTION = "protifer Triton model repository (OCI artifact)"
 ENV_DOCKERFILE = Path("infra/triton/Dockerfile.modelenv")
 ENV_TARBALL_REL = "_envs/cpu_py312.tar.gz"
 ENV_TARBALL_IN_IMAGE = "/opt/protifer/cpu_py312.tar.gz"
@@ -267,12 +270,17 @@ def collect_blobs(staging: Path) -> list[str]:
 
 
 def build_push_cmd(
-    ref: str, config_path: Path, blob_args: list[str]
+    ref: str, config_path: Path, blob_args: list[str], annotations: dict[str, str]
 ) -> list[str]:
+    annotation_args = []
+    for key, value in annotations.items():
+        if value:
+            annotation_args += ["--annotation", f"{key}={value}"]
     return [
         "oras", "push", ref,
         "--artifact-type", ARTIFACT_TYPE,
         "--config", f"{config_path}:{INVENTORY_MEDIA_TYPE}",
+        *annotation_args,
         *blob_args,
     ]
 
@@ -313,6 +321,21 @@ Examples:
     parser.add_argument("--org", default=DEFAULT_ORG, help=f"GHCR org (default: {DEFAULT_ORG})")
     parser.add_argument("--repo", default=DEFAULT_REPO, help=f"Repo name (default: {DEFAULT_REPO})")
     parser.add_argument("--tag", default="latest", help="Push tag (default: latest)")
+    parser.add_argument(
+        "--image-source",
+        default=DEFAULT_IMAGE_SOURCE,
+        help=f"org.opencontainers.image.source annotation (default: {DEFAULT_IMAGE_SOURCE}).",
+    )
+    parser.add_argument(
+        "--image-licenses",
+        default=DEFAULT_IMAGE_LICENSES,
+        help=f"org.opencontainers.image.licenses annotation (default: {DEFAULT_IMAGE_LICENSES}).",
+    )
+    parser.add_argument(
+        "--image-description",
+        default=DEFAULT_IMAGE_DESCRIPTION,
+        help="org.opencontainers.image.description annotation.",
+    )
     parser.add_argument(
         "--weights-root",
         default=None,
@@ -398,7 +421,12 @@ def main() -> int:
         config_path.write_text(json.dumps(inventory, indent=2) + "\n")
 
         blob_args = collect_blobs(staging)
-        cmd = build_push_cmd(ref, config_path, blob_args)
+        annotations = {
+            "org.opencontainers.image.source": args.image_source,
+            "org.opencontainers.image.licenses": args.image_licenses,
+            "org.opencontainers.image.description": args.image_description,
+        }
+        cmd = build_push_cmd(ref, config_path, blob_args, annotations)
 
         if args.dry_run:
             logger.info("Dry run — would push %d blob(s) to %s", len(blob_args), ref)

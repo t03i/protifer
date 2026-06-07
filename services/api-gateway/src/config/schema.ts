@@ -12,8 +12,6 @@ import {
 } from '@protifer/shared'
 import { z } from 'zod'
 
-// Repo-relative path to the checked-in dev/test inventory (config-blob
-// equivalent). Absolute so it resolves regardless of cwd.
 const DEV_INVENTORY_FILE = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../../infra/triton/model-inventory.dev.json',
@@ -386,8 +384,6 @@ export function assertProductionInvariants(cfg: Config): void {
     issues.push('DEV_OVERRIDE_AUTH must not be true in production')
   }
 
-  // C1: prod reads inventory from the same digest-pinned artifact model-init
-  // materializes — never a mutable tag or the dev file source.
   if (!cfg.models.artifactRef) {
     issues.push(
       'MODEL_ARTIFACT_REF must be set in production (digest-pinned OCI model-repo)',

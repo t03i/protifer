@@ -133,14 +133,6 @@ services:
       retries: 5
     logging: *default-logging
 
-  # Opt-in real Triton on CPU, mirroring prod's OCI-artifact shape (Decision 2).
-  # Inert unless `--profile cpu-triton` is passed; default `up` stays on mock-triton.
-  # A thin stock-oras one-shot `oras pull`s the model-repo OCI artifact (which
-  # includes _envs/cpu_py312.tar.gz) into a fresh /models, then Triton serves the
-  # whole repo with --model-control-mode=none (the artifact is the served set).
-  # For real-artifact testing: push the model-repo to a local registry first, e.g.
-  #   docker run -d -p 5000:5000 registry:2
-  #   oras push registry:5000/<org>/model-repo:dev …   (see build script, task 1.x)
   model-init:
     profiles: ['cpu-triton']
     image: ghcr.io/oras-project/oras:v1.2.0
@@ -157,16 +149,12 @@ services:
 
   triton:
     profiles: ['cpu-triton']
-    # Stock image by tag → Docker resolves the host-arch manifest (native arm64 on
-    # Apple Silicon). Python-backend deps load from the pulled execution env.
     image: nvcr.io/nvidia/tritonserver:25.06-py3
     command:
       - tritonserver
       - --model-repository=/models
       - --model-control-mode=none
       - --log-verbose=0
-    # Only 8000 (HTTP) is host-published; 8001/8002 are reached as triton:8001
-    # over the compose network. mock-triton already owns host 8001/8002.
     ports:
       - '127.0.0.1:8000:8000'
     volumes:

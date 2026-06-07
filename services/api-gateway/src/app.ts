@@ -157,7 +157,7 @@ export function createApp(overrides?: {
     })
   const serveStatic = overrides?.serveStatic
   // Prod injects the OCI-derived suite; dev/tests fall back to the file source.
-  const suiteV1 = overrides?.suite ?? resolveSuiteFromConfig(config.models)
+  const modelSuite = overrides?.suite ?? resolveSuiteFromConfig(config.models)
   const embeddingQueue = createQueue(QUEUE_NAMES.EMBEDDING, connection)
   const predictionQueue = createQueue(QUEUE_NAMES.PREDICTION, connection)
   const flowProducer = createFlowProducer(connection)
@@ -512,8 +512,8 @@ fetch('/api/auth/sign-in/social',{method:'POST',credentials:'include',headers:{'
       return typeof seq === 'string' && seq.length > 0
         ? computePredictionJobId(
             seq,
-            suiteV1.embeddingModel,
-            suiteV1.predictionModels,
+            modelSuite.embeddingModel,
+            modelSuite.predictionModels,
           )
         : undefined
     },
@@ -530,7 +530,7 @@ fetch('/api/auth/sign-in/social',{method:'POST',credentials:'include',headers:{'
     computeJobId: (body) => {
       const seq = (body as { sequence?: string }).sequence
       return typeof seq === 'string' && seq.length > 0
-        ? computeEmbeddingJobId(seq, suiteV1.embeddingModel)
+        ? computeEmbeddingJobId(seq, modelSuite.embeddingModel)
         : undefined
     },
     queue: embeddingQueue,
@@ -545,7 +545,7 @@ fetch('/api/auth/sign-in/social',{method:'POST',credentials:'include',headers:{'
     flowProducer,
     store,
     redis,
-    suite: suiteV1,
+    suite: modelSuite,
     priority: sheddingConfig.priority,
   }
 
@@ -561,7 +561,7 @@ fetch('/api/auth/sign-in/social',{method:'POST',credentials:'include',headers:{'
       embeddingQueue,
       store,
       redis,
-      suite: suiteV1,
+      suite: modelSuite,
       priority: sheddingConfig.priority,
     }),
   )
