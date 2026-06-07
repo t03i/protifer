@@ -70,8 +70,8 @@ not a runnable model image.
 ```
  BUILD (local script)                DEPLOY HOST (doco-cd)
  ┌────────────────────────┐         ┌─────────────────────────────────────────┐
- │ assemble /models tree  │         │ model-init (stock oras image, one-shot):  │
- │  + _envs/cpu_py312.tgz │  push   │   oras pull $REF → fresh dir, then        │
+ │ assemble models/+envs/ │         │ model-init (stock oras image, one-shot):  │
+ │  trees (Decision 8)    │  push   │   oras pull $REF → fresh dir, then        │
  │ env built in amd64     │ ──────▶ │   atomic repoint /models (full replace)   │
  │   docker stage         │  GHCR   │ triton: depends_on completed →            │
  │ onnx.checker (here!)   │         │   --model-control-mode=none, load all     │
@@ -109,7 +109,7 @@ reusable layer blobs."
  blob prott5/model.onnx      = sha256:AAA…   vespag weights change, prott5 untouched:
  blob prott5/config.pbtxt    = sha256:DDD…  →  prott5 blobs byte-identical → SKIP ✅
  blob vespag/model.onnx      = sha256:BBB…     vespag/model.onnx → new sha → transfer
- blob _envs/cpu_py312.tar.gz = sha256:EEE…     only changed file(s) (+ tiny config) move
+ blob envs/cpu_py312.tar.gz  = sha256:EEE…     only changed file(s) (+ tiny config) move
 ```
 
 - **Determinism is intrinsic.** A blob _is_ a file's raw bytes — no tar, no
@@ -121,7 +121,7 @@ reusable layer blobs."
   used to hand-roll is now a property of the format.
 - **Finer than per-model.** A `config.pbtxt` whitespace edit moves only that tiny
   blob, not the model's weights. Per-file is strictly better than per-model dedup.
-- **One determinism caveat — the conda env.** `_envs/cpu_py312.tar.gz` is a
+- **One determinism caveat — the conda env.** `envs/cpu_py312.tar.gz` is a
   _produced_ gzip tar, so its blob digest is only stable if conda-pack output is
   reproducible (gzip embeds mtime). It changes rarely; cache the produced tarball
   (Decision 5) so weight-only rebuilds reuse the identical blob and it dedups.
@@ -237,9 +237,10 @@ both consumers from the single deploy-repo variable.
 
 ## Decision 5 — Conda execution env built in-Docker for linux/amd64 (SETTLED)
 
-The CPU conda-pack env (`_envs/cpu_py312.tar.gz`) that python backends reference
-via `EXECUTION_ENV_PATH` (in `_internal_prott5_tokenizer`, `_tmbed_viterbi`, and
-the deferred ESM2 tokenizer `config.pbtxt`) is built **inside a `linux/amd64`
+The CPU conda-pack env (`envs/cpu_py312.tar.gz`, sibling tree per Decision 8) that
+python backends reference via `EXECUTION_ENV_PATH` (in `_internal_prott5_tokenizer`,
+`_tmbed_viterbi`, and the deferred ESM2 tokenizer `config.pbtxt`) is built
+**inside a `linux/amd64`
 Docker stage**, not natively on the build host.
 
 - **Why in-Docker, platform-pinned?** Triton runs on `linux/amd64`; a conda-pack
@@ -250,7 +251,8 @@ Docker stage**, not natively on the build host.
 - The env-builder from `Dockerfile.init` is **relocated, not deleted**: it becomes
   a small `linux/amd64` Docker build (micromamba + conda-pack →
   `cpu_py312.tar.gz`) that the local script invokes, then stages the produced
-  tarball under `_envs/` before the `oras push`. `init_models.py:
+  tarball under the sibling `envs/` tree (Decision 8) before the `oras push`.
+  `init_models.py:
 stage_execution_env()` and the standalone runtime `Dockerfile.init` are gone.
 - **Build cost / determinism:** the env build is the heaviest step and its gzip
   output is the one non-intrinsically-deterministic blob (Decision 1b). Cache the
@@ -283,6 +285,62 @@ This is cheap (no weights, no push) and preserves the safety the old
    (`triton`/`id`/`role`/`version`; `internal` omits `id`) as the typed config.
 4. `oras push` as **per-file uncompressed blobs** + the config blob (Decision 1b).
 5. **Print the immutable digest** for the deploy repo to pin.
+
+## Decision 8 — Artifact layout: `models/` + `envs/` siblings; empty version dirs carried (SETTLED; corrects Decisions 1/1b/5)
+
+Two packaging bugs made Triton **fatal-exit on a clean boot** from the artifact
+(confirmed: 22 models reach READY only with `--exit-on-error=false`, which
+defaults **true**):
+
+1. **`_envs/` was a child of the model-repository root.** Staged at
+   `<root>/_envs/cpu_py312.tar.gz` and pulled into the very dir Triton scans
+   (`--model-repository=/models`), Triton polled `_envs` as a model →
+   _"Invalid model name '\_envs': could not determine backend"_ → exit 1.
+2. **Empty ensemble version dirs vanished in the OCI round-trip.** oras stores
+   **files, not directories**; the ensemble `1/` dirs (`bind_embed`,
+   `prot_t5_pipeline`, `tmbed`) carried only `.gitkeep`, which the build
+   **excludes** (`EXCLUDE_NAMES`) → no blob carried that path → `oras pull` never
+   recreated `1/` → ensembles had no version dir to load. (Independent of bug 1 —
+   the env split does not fix it.)
+
+**Decision:**
+
+- The artifact has **two top-level trees**: `models/` (the Triton model
+  repository) and `envs/` (the conda execution env) — **siblings**, so `envs/`
+  is never in Triton's model-scan scope.
+- Containers mount the pulled artifact at a **root** and point Triton at the
+  subtree: `oras pull -o /data` → `--model-repository=/data/models`, env at
+  `/data/envs/`. (Dev mount path is the monorepo's call; prod is deploy-repo's —
+  the pbtxt is mount-agnostic, below.)
+- Python backends reference the env via Triton's **`$$TRITON_MODEL_DIRECTORY`**
+  substitution, not an absolute path:
+  `EXECUTION_ENV_PATH: "$$TRITON_MODEL_DIRECTORY/../../envs/cpu_py312.tar.gz"`.
+  This resolves relative to `<model_repo>/<model_name>`, so **only the relative
+  `models/`↔`envs/` shape is fixed** — the absolute mount path may differ dev vs
+  prod without re-authoring any `config.pbtxt`.
+- The build script **materializes a carried placeholder** (`.keep`, 0 bytes,
+  **not** excluded) in every ensemble version dir so oras carries the directory
+  and `oras pull` reconstructs it. Triton tolerates the extra file in an
+  ensemble version dir.
+
+```
+artifact root  (oras pull -o /data)
+├── models/                      --model-repository=/data/models
+│   ├── bind_embed/
+│   │   ├── config.pbtxt
+│   │   └── 1/.keep              ← carried so the empty version dir survives
+│   ├── _internal_prott5_tokenizer/
+│   │   └── config.pbtxt         EXECUTION_ENV_PATH: $$TRITON_MODEL_DIRECTORY/../../envs/…
+│   └── … 20 more
+└── envs/
+    └── cpu_py312.tar.gz         ← sibling; never scanned as a model
+```
+
+This supersedes the `_envs/`-under-root staging in Decisions 1/1b/5 and makes the
+inventory builder's `if d.name == "_envs"` skip structurally unnecessary
+(`models/` no longer contains the env tree). Build-script staging now writes into
+`staging/models/` and `staging/envs/`; `model_dirs()` and `collect_blobs()` walk
+accordingly.
 
 ## Risks
 
