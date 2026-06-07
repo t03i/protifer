@@ -154,6 +154,9 @@ services:
       - tritonserver
       - --model-repository=/data/models
       - --model-control-mode=none
+      # Configs are strict/complete; skip the auto-complete stub pass (it can fail
+      # to resolve the conda exec env, blocking python-backend models).
+      - --disable-auto-complete-config
       - --log-verbose=0
     ports:
       - '127.0.0.1:8000:8000'

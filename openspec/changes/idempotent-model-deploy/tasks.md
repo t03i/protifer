@@ -138,9 +138,14 @@
 - [x] 8.5 `check-model-repository-layout.py`: confirm it still passes against the
       source tree (ensemble version dirs present via `.gitkeep`); no env-path
       assertions needed (pbtxt path is relative).
-- [ ] 8.6 Rebuild + push a fresh artifact; boot Triton with the **default**
+- [x] 8.6 Rebuild + push a fresh artifact; boot Triton with the **default**
       `--exit-on-error` (true) and confirm all models + ensembles reach READY with
-      no `_envs`/version-dir errors. Re-pin the new digest.
+      no `_envs`/version-dir errors. Re-pin the new digest. (Verified locally:
+      real weighted artifact → oras round-trip → cpu-triton boot reaches **22/22
+      READY, 0 UNAVAILABLE, health 200**, no fatal exit. Required adding
+      `--disable-auto-complete-config` (configs are strict; the auto-complete stub
+      otherwise fails to resolve the conda exec env). Prod digest re-pin is the
+      deploy-repo action.)
 - [x] 8.7 Hand the layout contract change to the deploy repo (paste, not a
       tracked file): `models/`+`envs/` siblings, `-o /data`,
       `--model-repository=/data/models`, fresh-digest re-pin.
