@@ -7,7 +7,11 @@ import { serveStatic } from 'hono/bun'
 import pino from 'pino'
 
 import { createApp } from './app.ts'
-import { loadConfig, ProductionConfigError } from './config/index.ts'
+import {
+  loadConfig,
+  loadSuiteForBoot,
+  ProductionConfigError,
+} from './config/index.ts'
 
 initSentry('api-gateway')
 
@@ -27,7 +31,17 @@ try {
 
 const logger = pino({ name: 'api-gateway', ...defaultPinoOptions() })
 
-const { app, close } = createApp({ serveStatic, config })
+// Resolve the served suite from the artifact inventory before boot. Fails loud
+// if the OCI config is unreachable — no stale fallback (Decision 3).
+let suite: Awaited<ReturnType<typeof loadSuiteForBoot>>
+try {
+  suite = await loadSuiteForBoot(config.models)
+} catch (err) {
+  logger.error({ err }, 'failed to load model inventory at boot')
+  process.exit(1)
+}
+
+const { app, close } = createApp({ serveStatic, config, suite })
 
 const server = Bun.serve({
   port: config.env.port,

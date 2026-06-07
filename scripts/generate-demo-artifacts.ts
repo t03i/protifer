@@ -174,11 +174,11 @@ export async function generateForInput(
 async function main(): Promise<void> {
   // Imported lazily so the script can run without the api-gateway workspace
   // being compiled into dist.
-  const { buildSuiteV1 } =
+  const { resolveSuiteFromConfig } =
     await import('../services/api-gateway/src/config/suites.ts')
   const { ConfigSchema, TEST_ENV } =
     await import('../services/api-gateway/src/config/schema.ts')
-  const suite = buildSuiteV1(ConfigSchema.load(TEST_ENV).models)
+  const suite = resolveSuiteFromConfig(ConfigSchema.load(TEST_ENV).models)
   const suiteHash = computeModelConfigHash(suite.predictionModels)
 
   await mkdir(PUBLIC_DEMO_DIR, { recursive: true })

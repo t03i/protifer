@@ -1,5 +1,6 @@
 export * from './types.ts'
 export * from './hash.ts'
+export * from './inventory.ts'
 export * from './logger-options.ts'
 export * from './errors.ts'
 export * from './env.ts'

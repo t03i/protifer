@@ -6,6 +6,7 @@ import type {
   FlagOverrideStore,
   Logger,
   ObjectStore,
+  PredictionSuiteConfig,
   Redis,
 } from '@protifer/shared'
 import {
@@ -42,7 +43,7 @@ import type { CleanupHandle } from './cleanup.ts'
 import { setupJobCleanup } from './cleanup.ts'
 import type { Config } from './config/index.ts'
 import { loadConfig } from './config/index.ts'
-import { buildSuiteV1 } from './config/suites.ts'
+import { resolveSuiteFromConfig } from './config/suites.ts'
 import {
   createPrometheusFlagHook,
   createSentryFlagHook,
@@ -143,6 +144,7 @@ export function createApp(overrides?: {
   connection?: ReturnType<typeof createRedisConnection>
   serveStatic?: (options: { root: string }) => MiddlewareHandler
   config?: Config
+  suite?: PredictionSuiteConfig
 }): { app: OpenAPIHono<{ Variables: Variables }>; close: () => Promise<void> } {
   const config = overrides?.config ?? loadConfig()
   const store = overrides?.store ?? createGatewayStore(config.storage)
@@ -154,7 +156,8 @@ export function createApp(overrides?: {
       password: config.redis.password,
     })
   const serveStatic = overrides?.serveStatic
-  const suiteV1 = buildSuiteV1(config.models)
+  // Prod injects the OCI-derived suite; dev/tests fall back to the file source.
+  const suiteV1 = overrides?.suite ?? resolveSuiteFromConfig(config.models)
   const embeddingQueue = createQueue(QUEUE_NAMES.EMBEDDING, connection)
   const predictionQueue = createQueue(QUEUE_NAMES.PREDICTION, connection)
   const flowProducer = createFlowProducer(connection)
