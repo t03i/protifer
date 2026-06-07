@@ -132,6 +132,9 @@ services:
       GITHUB_CLIENT_ID: 'test-client-id'
       GITHUB_CLIENT_SECRET: 'test-client-secret'
       CORS_ORIGINS: '*'
+      MODEL_INVENTORY_FILE: /app/infra/triton/model-inventory.dev.json
+    volumes:
+      - ../infra/triton/model-inventory.dev.json:/app/infra/triton/model-inventory.dev.json:ro
     ports:
       - '13001:3001'
     depends_on:

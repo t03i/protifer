@@ -133,46 +133,34 @@ services:
       retries: 5
     logging: *default-logging
 
-  # Opt-in real Triton on CPU against the local model-repository.
-  # Inert unless `--profile cpu-triton` is passed; default `up` stays on mock-triton.
-  # Mirrors prod: stock Triton image + a CPU conda-pack execution env staged by an
-  # init step, instead of a deps-baked dev image.
-  triton-init:
+  model-init:
     profiles: ['cpu-triton']
-    # Build only the env-builder stage (host-arch native) and stage its tarball.
-    build:
-      context: ./triton
-      dockerfile: Dockerfile.init
-      target: env-builder
+    image: ghcr.io/oras-project/oras:v1.2.0
+    environment:
+      MODEL_ARTIFACT_REF: ${MODEL_ARTIFACT_REF:-registry:5000/<org>/model-repo:dev}
     entrypoint:
       - sh
       - -c
-      - 'mkdir -p /models/_envs && cp /opt/protifer/cpu_py312.tar.gz /models/_envs/cpu_py312.tar.gz'
+      - 'rm -rf /models/* && oras pull --plain-http "$$MODEL_ARTIFACT_REF" -o /models'
     volumes:
-      - triton-env:/models/_envs
+      - triton-models:/models
     restart: 'no'
     logging: *default-logging
 
   triton:
     profiles: ['cpu-triton']
-    # Stock image by tag → Docker resolves the host-arch manifest (native arm64 on
-    # Apple Silicon). Python-backend deps load from the staged execution env.
     image: nvcr.io/nvidia/tritonserver:25.06-py3
     command:
       - tritonserver
       - --model-repository=/models
-      - --model-control-mode=explicit
-      - --load-model=prot_t5_pipeline
+      - --model-control-mode=none
       - --log-verbose=0
-    # Only 8000 (HTTP) is host-published; 8001/8002 are reached as triton:8001
-    # over the compose network. mock-triton already owns host 8001/8002.
     ports:
       - '127.0.0.1:8000:8000'
     volumes:
-      - ../model-repository:/models:ro
-      - triton-env:/models/_envs:ro
+      - triton-models:/models:ro
     depends_on:
-      triton-init:
+      model-init:
         condition: service_completed_successfully
     mem_limit: 10g
     restart: unless-stopped
@@ -217,11 +205,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://protifer:protifer@postgres:5432/protifer}
       CORS_ORIGINS: 'http://localhost:5173'
       BETTER_AUTH_BASE_URL: 'http://localhost:9090'
+      MODEL_INVENTORY_FILE: /app/infra/triton/model-inventory.dev.json
     volumes:
       - ../services/api-gateway/src:/app/services/api-gateway/src
       - ../services/api-gateway/scripts:/app/services/api-gateway/scripts
       - ../packages/shared/src:/app/packages/shared/src
       - ../packages/triton-client/src:/app/packages/triton-client/src
+      - ../infra/triton/model-inventory.dev.json:/app/infra/triton/model-inventory.dev.json:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -308,4 +298,4 @@ volumes:
   garage_meta:
   garage_data:
   postgres_data:
-  triton-env:
+  triton-models:

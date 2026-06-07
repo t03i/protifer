@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "models:build": "python3 build-model-archives.py --version 1 --output dist/",
-    "models:publish": "python3 build-model-archives.py --version 1 --output dist/ --publish models-v1.0.0"
+    "models:build": "python3 build-model-artifact.py",
+    "models:guard": "python3 check-model-repository-layout.py"
   },
   "dependencies": {
     "@protifer/shared": "workspace:*",

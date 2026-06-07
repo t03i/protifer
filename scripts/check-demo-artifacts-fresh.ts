@@ -56,11 +56,11 @@ export async function checkDemoArtifactsFresh(): Promise<{
   stale: string[]
   indexIssues: string[]
 }> {
-  const { buildSuiteV1 } =
+  const { resolveSuiteFromConfig } =
     await import('../services/api-gateway/src/config/suites.ts')
   const { ConfigSchema, TEST_ENV } =
     await import('../services/api-gateway/src/config/schema.ts')
-  const suite = buildSuiteV1(ConfigSchema.load(TEST_ENV).models)
+  const suite = resolveSuiteFromConfig(ConfigSchema.load(TEST_ENV).models)
   const currentSuite = computeModelConfigHash(suite.predictionModels)
 
   const indexPath = resolve(PUBLIC_DEMO_DIR, 'index.json')

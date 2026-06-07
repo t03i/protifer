@@ -157,15 +157,45 @@ describe('loadConfig', () => {
     }
   })
 
+  const PROD_ENV = {
+    ...VALID_ENV,
+    NODE_ENV: 'production',
+    BETTER_AUTH_BASE_URL: 'https://api.example.com',
+    CORS_ORIGINS: 'https://app.example.com,https://*.example.com',
+    GARAGE_RPC_SECRET: 'a'.repeat(64),
+    GARAGE_ADMIN_TOKEN: 'real-admin-token-xyz',
+    MODEL_ARTIFACT_REF: `ghcr.io/org/model-repo@sha256:${'a'.repeat(64)}`,
+  }
+
+  it('production requires a digest-pinned MODEL_ARTIFACT_REF', () => {
+    expect.assertions(2)
+    try {
+      loadConfig({ ...PROD_ENV, MODEL_ARTIFACT_REF: '' })
+    } catch (e) {
+      expect(e).toBeInstanceOf(ProductionConfigError)
+      const err = e as ProductionConfigError
+      expect(err.issues.some((i) => i.includes('MODEL_ARTIFACT_REF'))).toBe(
+        true,
+      )
+    }
+  })
+
+  it('production rejects a mutable-tag MODEL_ARTIFACT_REF', () => {
+    expect.assertions(2)
+    try {
+      loadConfig({
+        ...PROD_ENV,
+        MODEL_ARTIFACT_REF: 'ghcr.io/org/model-repo:v1',
+      })
+    } catch (e) {
+      expect(e).toBeInstanceOf(ProductionConfigError)
+      const err = e as ProductionConfigError
+      expect(err.issues.some((i) => i.includes('digest-pinned'))).toBe(true)
+    }
+  })
+
   it('production passes with valid values', () => {
-    const cfg = loadConfig({
-      ...VALID_ENV,
-      NODE_ENV: 'production',
-      BETTER_AUTH_BASE_URL: 'https://api.example.com',
-      CORS_ORIGINS: 'https://app.example.com,https://*.example.com',
-      GARAGE_RPC_SECRET: 'a'.repeat(64),
-      GARAGE_ADMIN_TOKEN: 'real-admin-token-xyz',
-    })
+    const cfg = loadConfig(PROD_ENV)
     expect(cfg.env.nodeEnv).toBe('production')
     expect(() => {
       assertProductionInvariants(cfg)

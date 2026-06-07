@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createEmbeddingsRouter } from './embeddings.ts'
 import type { Auth } from '../auth/index.ts'
 import { ConfigSchema, TEST_ENV } from '../config/schema.ts'
-import { buildSuiteV1 } from '../config/suites.ts'
+import { resolveSuiteFromConfig } from '../config/suites.ts'
 import { createAuthenticateMiddleware } from '../middleware/auth/index.ts'
 import type { RedisCommands } from '../queue.ts'
 import type { Variables } from '../types/hono.ts'
@@ -52,7 +52,7 @@ function makeApp() {
       embeddingQueue: mockQueue,
       store: mockStore,
       redis: mockRedis as RedisCommands,
-      suite: buildSuiteV1(ConfigSchema.load(TEST_ENV).models),
+      suite: resolveSuiteFromConfig(ConfigSchema.load(TEST_ENV).models),
     }),
   )
   return app

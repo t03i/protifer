@@ -5,4 +5,8 @@ export {
   ProductionConfigError,
   type Config,
 } from './schema.ts'
-export { buildSuiteV1 } from './suites.ts'
+export {
+  buildSuiteFromInventory,
+  resolveSuiteFromConfig,
+  loadSuiteForBoot,
+} from './suites.ts'

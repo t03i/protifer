@@ -37,7 +37,6 @@ export async function processEmbeddingJob(
   const response = await triton.modelInfer(
     {
       model_name: 'prot_t5_pipeline',
-      model_version: embeddingModel.version,
       inputs: [
         {
           name: 'sequences',
@@ -60,9 +59,7 @@ export async function processEmbeddingJob(
   // Primary path: FP16 raw bytes directly off the wire → Garage.
   let fp16Buf: Buffer = response.raw_output_contents[0] ?? Buffer.alloc(0)
 
-  // Defense-in-depth fallback. Real Triton emits embeddings exclusively via
-  // raw_output_contents; branch exists so a misconfigured server cannot
-  // silently store a zero-byte embedding.
+  // Fallback for a misconfigured server that emits fp32 instead of raw bytes.
   if (fp16Buf.length === 0 && output.contents.fp32_contents.length > 0) {
     fp16Buf = fp32ArrayToFp16Buffer(output.contents.fp32_contents)
   }

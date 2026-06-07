@@ -1,0 +1,65 @@
+{
+  "models": [
+    {
+      "triton": "prot_t5_pipeline",
+      "id": "prott5_xl_u50",
+      "role": "embedding",
+      "version": "dev"
+    },
+    {
+      "triton": "prott5_sec",
+      "id": "prott5_secondary_structure",
+      "role": "prediction",
+      "version": "dev"
+    },
+    {
+      "triton": "tmbed",
+      "id": "tmbed",
+      "role": "prediction",
+      "version": "dev"
+    },
+    { "triton": "seth", "id": "seth", "role": "prediction", "version": "dev" },
+    {
+      "triton": "bind_embed",
+      "id": "bindembed",
+      "role": "prediction",
+      "version": "dev"
+    },
+    {
+      "triton": "prott5_cons",
+      "id": "prott5_conservation",
+      "role": "prediction",
+      "version": "dev"
+    },
+    {
+      "triton": "light_attention_subcell",
+      "id": "light_attention_subcellular",
+      "role": "prediction",
+      "version": "dev"
+    },
+    {
+      "triton": "light_attention_membrane",
+      "id": "light_attention_membrane",
+      "role": "prediction",
+      "version": "dev"
+    },
+    { "triton": "vespag", "role": "internal", "version": "dev" },
+    { "triton": "_internal_prott5_onnx", "role": "internal", "version": "dev" },
+    {
+      "triton": "_internal_prott5_tokenizer",
+      "role": "internal",
+      "version": "dev"
+    },
+    { "triton": "_tmbed_cv0", "role": "internal", "version": "dev" },
+    { "triton": "_tmbed_cv1", "role": "internal", "version": "dev" },
+    { "triton": "_tmbed_cv2", "role": "internal", "version": "dev" },
+    { "triton": "_tmbed_cv3", "role": "internal", "version": "dev" },
+    { "triton": "_tmbed_cv4", "role": "internal", "version": "dev" },
+    { "triton": "_tmbed_viterbi", "role": "internal", "version": "dev" },
+    { "triton": "_bind_embed_cv0", "role": "internal", "version": "dev" },
+    { "triton": "_bind_embed_cv1", "role": "internal", "version": "dev" },
+    { "triton": "_bind_embed_cv2", "role": "internal", "version": "dev" },
+    { "triton": "_bind_embed_cv3", "role": "internal", "version": "dev" },
+    { "triton": "_bind_embed_cv4", "role": "internal", "version": "dev" }
+  ]
+}

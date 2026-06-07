@@ -66,7 +66,7 @@ Workspaces: `packages/*`, `services/*`, `apps/*`, `infra/*`, `tests/*`, `scripts
   - `readSecret(name)` — file-wins (`NAME_FILE` first, then `NAME` env). Use for credentials. Matches Docker/Postgres/k8s convention; secret pipeline beats env-leak surface.
   - `readConfig(name)` — env-wins (`NAME` first, then `NAME_FILE`). Use for tunables. Matches 12-factor.
 - Choice is declarative via `secretField()` / `configField()` in the schema.
-- **Static manifests** (model URLs, etc.) live in the prod deploy repo (`<deploy-org>/deploy-app`, `manifests/*.json`), mounted at known paths in containers. Triton init reads `MODEL_MANIFEST_PATH`. Dev uses mock-triton and needs no manifest.
+- **Model repository** is an immutable OCI artifact pinned by `MODEL_ARTIFACT_REF` (a digest) and pulled into Triton's volume by a stock `oras` one-shot. The gateway reads its model inventory from the artifact's config blob; dev uses mock-triton and reads a checked-in `infra/triton/model-inventory.dev.json` instead.
 - **Local file-mounted secrets** (optional) live in `infra/secrets/` (gitignored). `readSecret` falls back to env so dev workflows keep working without populating that directory.
 
 ## API contracts

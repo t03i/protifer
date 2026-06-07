@@ -1,3 +1,6 @@
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import {
   configField,
   customSection,
@@ -8,6 +11,11 @@ import {
   zCsv,
 } from '@protifer/shared'
 import { z } from 'zod'
+
+const DEV_INVENTORY_FILE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../infra/triton/model-inventory.dev.json',
+)
 
 const DEV_GARAGE_RPC_SECRET =
   '0000000000000000000000000000000000000000000000000000000000000000'
@@ -183,12 +191,26 @@ const jobCleanup = {
 }
 
 const models = {
-  version: configField({
-    envName: 'MODELS_VERSION',
+  artifactRef: configField({
+    envName: 'MODEL_ARTIFACT_REF',
     description:
-      'Release version tag for the model suite; namespaces the immutable result cache.',
+      'Pinned OCI model-repo digest (ghcr.io/<org>/model-repo@sha256:…), shared with model-init per the C1 same-digest invariant. Set = prod OCI inventory source; empty = dev file source.',
+    type: z.string(),
+    default: '',
+  }),
+  artifactToken: configField({
+    envName: 'MODEL_ARTIFACT_TOKEN',
+    description:
+      'Optional bearer token for GHCR read of the model artifact config (private registry). Anonymous if empty.',
+    type: z.string(),
+    default: '',
+  }),
+  inventoryFile: configField({
+    envName: 'MODEL_INVENTORY_FILE',
+    description:
+      'Path to the checked-in inventory JSON (config-blob equivalent) used as the dev/test source when MODEL_ARTIFACT_REF is unset.',
     type: z.string().min(1),
-    default: 'v1',
+    default: DEV_INVENTORY_FILE,
   }),
 }
 
@@ -360,6 +382,16 @@ export function assertProductionInvariants(cfg: Config): void {
 
   if (cfg.dev.overrideAuth) {
     issues.push('DEV_OVERRIDE_AUTH must not be true in production')
+  }
+
+  if (!cfg.models.artifactRef) {
+    issues.push(
+      'MODEL_ARTIFACT_REF must be set in production (digest-pinned OCI model-repo)',
+    )
+  } else if (!cfg.models.artifactRef.includes('@sha256:')) {
+    issues.push(
+      `MODEL_ARTIFACT_REF="${cfg.models.artifactRef}" must be digest-pinned (…@sha256:…), not a mutable tag`,
+    )
   }
 
   if (issues.length > 0) throw new ProductionConfigError(issues)
