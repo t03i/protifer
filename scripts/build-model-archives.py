@@ -134,37 +134,6 @@ def write_sidecar(archive_path: Path, sha256_hex: str) -> Path:
     return sidecar_path
 
 
-def resolve_repo(repo: str | None, repo_root: Path) -> str:
-    """Resolve the `owner/name` GitHub slug for building release-asset URLs.
-
-    Uses --repo when given; else parses `git remote get-url origin`. Handles
-    both SSH (git@github.com:owner/name.git) and HTTPS remotes.
-    """
-    if repo:
-        return repo
-    try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        url = result.stdout.strip() if result.returncode == 0 else ""
-    except (subprocess.SubprocessError, FileNotFoundError):
-        url = ""
-    if not url:
-        raise ValueError(
-            "Could not resolve GitHub repo for manifest URLs — pass --repo owner/name"
-        )
-    url = url.removesuffix(".git")
-    if url.startswith("git@"):
-        # git@github.com:owner/name -> owner/name
-        return url.split(":", 1)[1]
-    # https://github.com/owner/name -> owner/name
-    return "/".join(url.split("/")[-2:])
-
-
 def generate_manifest(repo: str, tag: str, version: str, folders: list[str]) -> dict:
     """Generate the deploy manifest pointing at this release's archive assets.
 
@@ -328,7 +297,7 @@ def generate_notes(output_dir: Path, version: str, commit: str) -> str:
 def publish_release(
     output_dir: Path,
     tag: str,
-    repo: str | None,
+    repo: str,
     *,
     version: str,
     repo_root: Path,
@@ -349,12 +318,11 @@ def publish_release(
     """
     import tempfile
 
-    repo_flags = ["--repo", repo] if repo else []
+    repo_flags = ["--repo", repo]
 
     # Generate the deploy manifest from the canonical folder set, self-referencing
     # this release's archive assets, and write it into the output dir for upload.
-    repo_slug = resolve_repo(repo, repo_root)
-    manifest = generate_manifest(repo_slug, tag=tag, version=version, folders=V14_FOLDERS)
+    manifest = generate_manifest(repo, tag=tag, version=version, folders=V14_FOLDERS)
     manifest_path = output_dir / f"models.v{version}.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     logger.info("Generated %s (%d entries)", manifest_path, len(manifest["downloads"]))
@@ -427,7 +395,7 @@ def publish_release(
 def publish_manifest_only(
     output_dir: Path,
     tag: str,
-    repo: str | None,
+    repo: str,
     *,
     version: str,
     repo_root: Path,
@@ -440,8 +408,7 @@ def publish_manifest_only(
 
     Returns 0 on success, 1 on failure.
     """
-    repo_slug = resolve_repo(repo, repo_root)
-    manifest = generate_manifest(repo_slug, tag=tag, version=version, folders=V14_FOLDERS)
+    manifest = generate_manifest(repo, tag=tag, version=version, folders=V14_FOLDERS)
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / f"models.v{version}.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -451,7 +418,7 @@ def publish_manifest_only(
         logger.error("Manifest parity check failed — not uploading to %s", tag)
         return 1
 
-    repo_flags = ["--repo", repo] if repo else []
+    repo_flags = ["--repo", repo]
     cmd = [
         "gh", "release", "upload", tag, str(manifest_path),
         "--clobber", *repo_flags,
@@ -622,7 +589,11 @@ Examples:
     parser.add_argument(
         "--repo",
         default=None,
-        help="GitHub repo (owner/name) for --publish. Default: auto-detected from git remote.",
+        help=(
+            "GitHub repo (owner/name) that hosts the release assets and manifest URLs. "
+            "REQUIRED with --publish / --publish-manifest — there is no git-remote "
+            "fallback, so the release target is always explicit."
+        ),
     )
     parser.add_argument(
         "--draft",
@@ -651,6 +622,17 @@ def main() -> int:
         repo_root = Path(__file__).resolve().parent.parent
 
     output_dir = Path(args.output).resolve()
+
+    # The publish paths bake --repo into the manifest download URLs and the
+    # release target. Require it explicitly — never silently inherit the repo
+    # from `git remote origin`, which would point the manifest at whatever clone
+    # happens to run the command.
+    if (args.publish or args.publish_manifest) and not args.repo:
+        logger.error(
+            "--repo owner/name is required with --publish / --publish-manifest"
+            " (no git-remote fallback — pass the release repo explicitly)"
+        )
+        return 1
 
     if args.generate_notes:
         notes = generate_notes(output_dir, version=args.version, commit=args.commit)
