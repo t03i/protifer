@@ -141,7 +141,7 @@
 - [ ] 8.6 Rebuild + push a fresh artifact; boot Triton with the **default**
       `--exit-on-error` (true) and confirm all models + ensembles reach READY with
       no `_envs`/version-dir errors. Re-pin the new digest.
-- [ ] 8.7 Hand the layout contract change to the deploy repo (paste, not a
+- [x] 8.7 Hand the layout contract change to the deploy repo (paste, not a
       tracked file): `models/`+`envs/` siblings, `-o /data`,
       `--model-repository=/data/models`, fresh-digest re-pin.
 
