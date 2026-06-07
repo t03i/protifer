@@ -69,3 +69,5 @@ tests/load/*.json
 tests/load/*.csv
 k6-*-summary.json
 .claude/scheduled_tasks.lock
+
+*.code-workspace

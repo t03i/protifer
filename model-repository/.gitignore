@@ -30,3 +30,5 @@ __pycache__/
 !README.md
 !Dockerfile*
 !init_models.py
+
+*.installed-sha256
