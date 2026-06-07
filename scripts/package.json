@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "models:build": "python3 build-model-artifact.py",
+    "models:build": "python3 build-model-artifact.py --repo protifer-models --org t03i --weights-root ../model-repository",
     "models:guard": "python3 check-model-repository-layout.py"
   },
   "dependencies": {
