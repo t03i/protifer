@@ -36,8 +36,8 @@ export async function processEmbeddingJob(
 
   const response = await triton.modelInfer(
     {
+      // Triton serves latest; cache version is non-numeric and not a wire model_version.
       model_name: 'prot_t5_pipeline',
-      model_version: embeddingModel.version,
       inputs: [
         {
           name: 'sequences',

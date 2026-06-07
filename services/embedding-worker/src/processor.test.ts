@@ -92,6 +92,43 @@ function makeTritonFp32Fallback(fp32: number[]): {
   }
 }
 
+// Real-Triton-shaped mock: rejects a non-numeric model_version on the wire.
+function makeStrictTriton(fp16Buf: Buffer): {
+  client: TritonClient
+  modelInferMock: ReturnType<typeof vi.fn>
+} {
+  const modelInferMock = vi.fn((req: { model_version?: string }) => {
+    if (req.model_version !== undefined && !/^\d+$/.test(req.model_version)) {
+      throw new Error('model_version must be numeric')
+    }
+    return Promise.resolve({
+      model_name: 'prot_t5_pipeline',
+      outputs: [
+        {
+          name: 'embeddings',
+          datatype: 'FP16',
+          shape: [fp16Buf.length / (1024 * 2), 1024],
+          contents: {
+            fp32_contents: [],
+            bytes_contents: [],
+            int64_contents: [],
+          },
+        },
+      ],
+      raw_output_contents: [fp16Buf],
+    })
+  })
+  return {
+    client: {
+      modelInfer: modelInferMock,
+      modelReady: vi.fn().mockResolvedValue(true),
+      serverReady: vi.fn(),
+      close: vi.fn(),
+    } as unknown as TritonClient,
+    modelInferMock,
+  }
+}
+
 describe('processEmbeddingJob', () => {
   it('returns cached embeddingRef immediately if already stored (no Triton call)', async () => {
     const sequence = 'ACDE'
@@ -132,10 +169,12 @@ describe('processEmbeddingJob', () => {
     expect(modelInferMock).toHaveBeenCalledOnce()
     const request = modelInferMock.mock.calls.at(0)?.[0] as {
       model_name: string
+      model_version?: string
       inputs: { name: string; datatype: string; shape: number[] }[]
       outputs: { name: string }[]
     }
     expect(request.model_name).toBe('prot_t5_pipeline')
+    expect(request.model_version).toBeUndefined()
     expect(request.inputs.at(0)?.name).toBe('sequences')
     expect(request.inputs.at(0)?.datatype).toBe('BYTES')
     expect(request.inputs.at(0)?.shape).toEqual([1])
@@ -168,5 +207,23 @@ describe('processEmbeddingJob', () => {
     await expect(
       processEmbeddingJob(makeJob(sequence), { store, triton }),
     ).rejects.toThrow(/invalid FP16 output length/)
+  })
+
+  it('succeeds against a strict Triton mock that rejects non-numeric model_version', async () => {
+    const sequence = 'MKTVRQERLK'
+    const seqLen = sequence.length
+    const store = makeInMemoryStore()
+    const fp32 = new Array(seqLen * 1024).fill(0.1) as number[]
+    const fp16Buf = fp32ArrayToFp16Buffer(fp32)
+    const { client: triton, modelInferMock } = makeStrictTriton(fp16Buf)
+
+    const result = await processEmbeddingJob(makeJob(sequence), {
+      store,
+      triton,
+    })
+
+    expect(modelInferMock).toHaveBeenCalledOnce()
+    const stored = await store.get(result.embeddingRef)
+    expect(stored.length).toBe(seqLen * 1024 * 2)
   })
 })
