@@ -27,6 +27,7 @@
     "@nightingale-elements/nightingale-track": "^5.6.0",
     "@nightingale-elements/nightingale-variation": "^5.6.0",
     "@protifer/shared": "workspace:*",
+    "@sentry/react": "^10.56.0",
     "@swissprot/swissbiopics-visualizer": "^0.0.29",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.66.5",
@@ -50,6 +51,7 @@
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@protifer/eslint-config": "workspace:*",
+    "@sentry/vite-plugin": "^5.3.0",
     "@tanstack/devtools-vite": "^0.3.11",
     "@tanstack/eslint-config": "^0.3.0",
     "@tanstack/react-devtools": "^0.7.0",

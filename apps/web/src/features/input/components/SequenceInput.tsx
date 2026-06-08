@@ -10,6 +10,8 @@ import { useSequence } from '../hooks/use-sequence'
 import { Alert, AlertDescription } from '#/components/ui/alert'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
+import { logger } from '#/lib/logger'
+import { describeSequence } from '#/lib/sequence-descriptor'
 import { InputAlphabet } from '#/types/sequence'
 
 export function SequenceInput() {
@@ -32,6 +34,10 @@ export function SequenceInput() {
 
     const result = await refetch()
     if (result.error) {
+      logger.error('Sequence resolution failed', result.error, {
+        ...(await describeSequence(input)),
+        type,
+      })
       toast.error('Could not resolve sequence. Please check your input.')
       return
     }

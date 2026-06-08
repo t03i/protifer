@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "amino_acid_run": {
+      "type": "pattern",
+      "pattern": "[ACDEFGHIKLMNPQRSTVWY]{20,}",
+      "redaction": { "method": "replace", "text": "[Filtered]" }
+    }
+  },
+  "applications": {
+    "$string": ["amino_acid_run"]
+  }
+}
