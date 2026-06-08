@@ -7,6 +7,9 @@ TOKEN="${GARAGE_ADMIN_TOKEN:-}"
 KEY_ID="${GARAGE_KEY_ID:-GK000000000000000000000000}"
 KEY_SECRET="${GARAGE_KEY_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}"
 BUCKET="${GARAGE_BUCKET:-embeddings}"
+# Advertised layout capacity in bytes (default 10 GiB for local dev; prod sets
+# this higher via GARAGE_LAYOUT_CAPACITY to match the host pool).
+LAYOUT_CAPACITY="${GARAGE_LAYOUT_CAPACITY:-10737418240}"
 
 AUTH=()
 if [ -n "$TOKEN" ]; then
@@ -56,8 +59,13 @@ if [ "$LAYOUT_VERSION" -eq 0 ]; then
 
   # Body must be {"roles": [...]} — UpdateClusterLayoutRequest is a struct, not a bare array
   # Field name is "id" (not "nodeId") per NodeRoleChange struct definition
-  LAYOUT_BODY=$(jq -n --arg id "$NODE_ID" \
-    '{"roles": [{"id": $id, "zone": "dc1", "capacity": 10737418240, "tags": []}]}')
+  # capacity = advertised layout capacity in bytes (a relative weight for data
+  # placement, NOT a hard usage cap; grow the underlying pool to add real space).
+  # Driven by GARAGE_LAYOUT_CAPACITY (default 10 GiB dev / set to 300 GiB in prod).
+  # Only applied on the FIRST layout assignment; an already-applied layout must
+  # be resized manually (garage layout assign -c <size> <node-id> && layout apply).
+  LAYOUT_BODY=$(jq -n --arg id "$NODE_ID" --argjson cap "$LAYOUT_CAPACITY" \
+    '{"roles": [{"id": $id, "zone": "dc1", "capacity": $cap, "tags": []}]}')
   curl -sf -X POST "${AUTH[@]}" "$ADMIN/UpdateClusterLayout" \
     -H "Content-Type: application/json" \
     -d "$LAYOUT_BODY" \
