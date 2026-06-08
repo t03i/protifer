@@ -1,0 +1,92 @@
+name: rollback
+
+# One operator action, one sha: repin each deploy repo's image-tag.env to the
+# target sha (doco-cd reconverges, no host touch) and promote the SPA Worker
+# version tagged with that same sha to 100%.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Target commit sha to roll both tiers back to'
+        required: true
+        type: string
+
+concurrency:
+  group: rollback
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  repin-deploy-tags:
+    runs-on: ubuntu-latest
+    environment: deploy
+    strategy:
+      matrix:
+        tier: [state, app]
+    steps:
+      - name: Mint deploy token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.DEPLOY_APP_ID }}
+          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
+          owner: ${{ secrets.DEPLOY_OWNER }}
+          repositories: ${{ secrets.DEPLOY_REPO_STATE }},${{ secrets.DEPLOY_REPO_APP }}
+
+      - name: Checkout deploy repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ secrets.DEPLOY_OWNER }}/${{ secrets[format('DEPLOY_REPO_{0}', matrix.tier)] }}
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Repin image tag env file
+        run: |
+          set -euo pipefail
+          {
+            echo '# CI-owned: the protifer build workflow overwrites this file on every deploy.'
+            echo '# Roll back by `git revert`-ing the bump commit.'
+            echo 'IMAGE_TAG=${{ inputs.sha }}'
+          } > image-tag.env
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config user.email '${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          git add image-tag.env
+          if git diff --cached --quiet; then
+            echo 'Tags already at this sha — nothing to roll back.'
+            exit 0
+          fi
+          git commit -m "rollback(${{ matrix.tier }}): repin images to ${{ inputs.sha }}"
+          git push
+
+  rollback-web:
+    runs-on: ubuntu-latest
+    environment: deploy
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Promote the version tagged with the target sha
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TARGET_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          vid=$(bunx wrangler@4 versions list | awk -v sha="$TARGET_SHA" '
+            /Version ID:/ { id=$3 }
+            /Tag:/ && $2==sha { print id; exit }')
+          if [ -z "$vid" ]; then
+            echo "No Worker version tagged $TARGET_SHA in the recent versions list." >&2
+            exit 1
+          fi
+          bunx wrangler@4 versions deploy "$vid@100%" --yes

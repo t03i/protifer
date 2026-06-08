@@ -67,6 +67,35 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service.image }}
           provenance: false
 
+  deploy-web:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: deploy
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build SPA
+        env:
+          VITE_GATEWAY_URL: ${{ vars.VITE_GATEWAY_URL }}
+        run: bun run --filter @protifer/web build
+
+      - name: Upload tagged version and promote
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          out=$(bunx wrangler@4 versions upload --tag "$GITHUB_SHA" --message "$GITHUB_SHA")
+          echo "$out"
+          vid=$(echo "$out" | grep -oE 'Worker Version ID: [0-9a-f-]+' | awk '{print $4}')
+          test -n "$vid"
+          bunx wrangler@4 versions deploy "$vid@100%" --yes
+
   # Bumps the pinned :<sha> by overwriting each deploy repo's image-tag.env
   bump-deploy-tags:
     needs: build
