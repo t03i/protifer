@@ -1,18 +1,27 @@
-# Sentry data scrubbing (repo-owned)
+# Sentry data scrubbing
 
-`sentry-pii.json` is the source of truth for the shared Sentry project's
-`relayPiiConfig` (Advanced Data Scrubbing). It redacts ≥20-residue canonical
-amino-acid runs at ingest — the defense-in-depth net behind the in-code
-`beforeSend` scrub and the `{ sequenceHash, seqLen }` descriptor.
+The PII scrub for the shared Sentry project lives **in the SDK**, not in
+server-side config. `scrubAminoAcidRuns` (`packages/shared/src/sentry-scrub.ts`)
+runs in `beforeSend` on both the backend (`initSentry`) and the frontend
+(`apps/web/src/lib/sentry.ts`), redacting ≥20-residue canonical amino-acid runs
+from event message / exception values / breadcrumbs / request data **before the
+event leaves the process**. This is Sentry's recommended primary defense and is
+plan-independent.
 
-GitOps, mirroring `infra/monitoring` alert rules:
+It sits behind the `{ sequenceHash, seqLen }` descriptor discipline (sequences
+are never put on events in the first place) and the frontend's key-name scrub.
 
-- **PR** — `ci.yml` validates the JSON shape.
-- **`main`** — `build.yml`'s `sentry-pii-sync` job `PATCH`es the project with this
-  file via the Sentry API.
+## Why not server-side `relayPiiConfig`?
 
-**Do not edit scrubbing in the Sentry UI** — the sync replaces the project's
-advanced rules, so UI edits are overwritten. Change the rule here.
+Custom `relayPiiConfig` rules (Advanced Data Scrubbing) are a Sentry
+**Business-plan** feature; the `PUT .../projects/{org}/{project}/` sync returned
+`403` on our plan, so it never actually protected anything. The CI sync job was
+removed. If the project later moves to a Business plan, `sentry-pii.json` is the
+ready-made `relayPiiConfig` template — re-add a sync step that `PUT`s it as the
+project's `relayPiiConfig` string, as an ingest-time net behind the SDK scrub.
 
-The DSN must not be enabled in any environment carrying real sequences until
-this config is synced.
+The canonical pattern (`[ACDEFGHIKLMNPQRSTVWY]{20,}`) must stay in sync between
+`sentry-pii.json` and `AMINO_ACID_RUN` in `sentry-scrub.ts`.
+
+The DSN must not be enabled in any environment carrying real sequences until the
+SDK scrub is in place (it is).

@@ -1,3 +1,4 @@
+import { scrubAminoAcidRuns } from '@protifer/shared/sentry-scrub'
 import * as Sentry from '@sentry/react'
 import type { ErrorEvent, EventHint } from '@sentry/react'
 
@@ -20,9 +21,10 @@ function scrubRecord(data: Record<string, unknown>): void {
 }
 
 /**
- * Layer-2 scrub (Decision 5): strip query strings and sequence-input field
- * values before an event leaves the browser. The server-side `relayPiiConfig`
- * (`infra/observability/sentry-pii.json`) is the ingest-time net behind this.
+ * In-browser PII scrub before an event is sent: strip query strings, redact
+ * sequence-input field values by key, then redact any ≥20-residue amino-acid
+ * run from free-text/data fields via the shared `scrubAminoAcidRuns` (the
+ * primary defense — there is no server-side `relayPiiConfig` net behind it).
  */
 function beforeSend(event: ErrorEvent, _hint: EventHint): ErrorEvent {
   if (event.request) {
@@ -35,7 +37,7 @@ function beforeSend(event: ErrorEvent, _hint: EventHint): ErrorEvent {
   for (const crumb of event.breadcrumbs ?? []) {
     if (crumb.data) scrubRecord(crumb.data)
   }
-  return event
+  return scrubAminoAcidRuns(event)
 }
 
 /**

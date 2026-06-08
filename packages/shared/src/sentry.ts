@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node'
 import pino from 'pino'
 
 import { defaultPinoOptions } from './logger-options.ts'
+import { scrubAminoAcidRuns } from './sentry-scrub.ts'
 
 let initialised = false
 
@@ -64,6 +65,9 @@ export function initSentry(
     tracesSampleRate: nodeEnv === 'production' ? 0.2 : 1.0,
     serverName: serviceName,
     initialScope: { tags: { service: serviceName } },
+    // Primary PII defense: redact ≥20-residue amino-acid runs before the event
+    // leaves the process (replaces the server-side `relayPiiConfig` net).
+    beforeSend: scrubAminoAcidRuns,
   })
 }
 
