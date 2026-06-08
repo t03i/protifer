@@ -155,7 +155,12 @@ services:
 
         if [ "$${MODEL_INIT_FORCE:-0}" != "1" ] && [ -n "$$have" ] && [ -d /data/models ] \
            && { [ "$$want" = "$$have" ] || [ -z "$$want" ]; }; then
-          echo "model-init: cache hit ($$have); skipping pull of $$REF"; exit 0
+          if [ -z "$$want" ]; then
+            echo "model-init: WARN serving UNVERIFIED cached $$have (could not resolve $$REF); set MODEL_INIT_FORCE=1 to re-pull"
+          else
+            echo "model-init: cache hit ($$have); skipping pull of $$REF"
+          fi
+          exit 0
         fi
 
         echo "model-init: pulling $$REF (have=$${have:-none} want=$${want:-unresolved})"
