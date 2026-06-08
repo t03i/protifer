@@ -71,23 +71,6 @@ describe('loadConfig', () => {
     }
   })
 
-  it('production rejects DEV_OVERRIDE_AUTH=true', () => {
-    expect.assertions(2)
-    try {
-      loadConfig({
-        ...VALID_ENV,
-        NODE_ENV: 'production',
-        BETTER_AUTH_BASE_URL: 'https://api.example.com',
-        CORS_ORIGINS: 'https://app.example.com',
-        DEV_OVERRIDE_AUTH: 'true',
-      })
-    } catch (e) {
-      expect(e).toBeInstanceOf(ProductionConfigError)
-      const err = e as ProductionConfigError
-      expect(err.issues.some((i) => i.includes('DEV_OVERRIDE_AUTH'))).toBe(true)
-    }
-  })
-
   it('production rejects http:// non-localhost BETTER_AUTH_BASE_URL', () => {
     expect.assertions(2)
     try {

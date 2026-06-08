@@ -76,49 +76,33 @@ describe('createAuthenticateMiddleware — normal session flow', () => {
 })
 
 describe('createAuthenticateMiddleware — legacy headers are ignored', () => {
-  it('ignores x-test-user-id (DEV_OVERRIDE_AUTH retired)', async () => {
-    process.env['DEV_OVERRIDE_AUTH'] = 'true'
-    try {
-      const auth = makeAuth(null)
-      const app = new Hono<{ Variables: Variables }>()
-      app.use(
-        '*',
-        createAuthenticateMiddleware({ auth, resolver: freeResolver }),
-      )
-      app.get('/test', (c) => c.json(c.get('auth')))
+  it('ignores x-test-user-id header', async () => {
+    const auth = makeAuth(null)
+    const app = new Hono<{ Variables: Variables }>()
+    app.use('*', createAuthenticateMiddleware({ auth, resolver: freeResolver }))
+    app.get('/test', (c) => c.json(c.get('auth')))
 
-      const res = await app.request('/test', {
-        headers: { 'X-Test-User-Id': 'attacker' },
-      })
-      expect(res.status).toBe(401)
-    } finally {
-      delete process.env['DEV_OVERRIDE_AUTH']
-    }
+    const res = await app.request('/test', {
+      headers: { 'X-Test-User-Id': 'attacker' },
+    })
+    expect(res.status).toBe(401)
   })
 
-  it('ignores x-load-test-key (LOAD_TEST_*_API_KEY retired)', async () => {
-    process.env['LOAD_TEST_FREE_API_KEY'] = 'still-set-for-some-reason'
-    try {
-      const auth = makeAuth(null)
-      const app = new Hono<{ Variables: Variables }>()
-      app.use(
-        '*',
-        createAuthenticateMiddleware({ auth, resolver: freeResolver }),
-      )
-      app.post('/test', (c) => c.json({ ok: true }))
+  it('ignores x-load-test-key header', async () => {
+    const auth = makeAuth(null)
+    const app = new Hono<{ Variables: Variables }>()
+    app.use('*', createAuthenticateMiddleware({ auth, resolver: freeResolver }))
+    app.post('/test', (c) => c.json({ ok: true }))
 
-      const res = await app.request('/test', {
-        method: 'POST',
-        body: JSON.stringify({ sequence: 'MEEPQ' }),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-load-test-key': 'still-set-for-some-reason',
-        },
-      })
-      expect(res.status).toBe(401)
-    } finally {
-      delete process.env['LOAD_TEST_FREE_API_KEY']
-    }
+    const res = await app.request('/test', {
+      method: 'POST',
+      body: JSON.stringify({ sequence: 'MEEPQ' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-load-test-key': 'still-set-for-some-reason',
+      },
+    })
+    expect(res.status).toBe(401)
   })
 })
 

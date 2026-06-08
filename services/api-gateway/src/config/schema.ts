@@ -7,7 +7,6 @@ import {
   defineConfig,
   loadSheddingConfig,
   secretField,
-  zBooleanString,
   zCsv,
 } from '@protifer/shared'
 import { z } from 'zod'
@@ -200,20 +199,6 @@ const models = {
   }),
 }
 
-// `dev.overrideAuth` is a tripwire: no runtime code consumes it (the legacy
-// header-based auth bypass it gated was removed). Declared so
-// `assertProductionInvariants` fails the boot if `DEV_OVERRIDE_AUTH=true`
-// against a prod build.
-const dev = {
-  overrideAuth: configField({
-    envName: 'DEV_OVERRIDE_AUTH',
-    description:
-      'Retired bypass flag retained as a production tripwire. No runtime effect.',
-    type: zBooleanString,
-    default: false,
-  }),
-}
-
 const SHEDDING_FIELDS: ReadonlyArray<{
   envName: string
   dotted: string
@@ -306,7 +291,6 @@ export const ConfigSchema = defineConfig({
   storage,
   jobCleanup,
   models,
-  dev,
   shedding: sheddingSection,
 })
 
@@ -352,10 +336,6 @@ export function assertProductionInvariants(cfg: Config): void {
         `CORS_ORIGINS contains "${origin}" — production requires https:// origins`,
       )
     }
-  }
-
-  if (cfg.dev.overrideAuth) {
-    issues.push('DEV_OVERRIDE_AUTH must not be true in production')
   }
 
   if (!cfg.models.artifactRef) {
