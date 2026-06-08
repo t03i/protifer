@@ -1,4 +1,5 @@
-import { createContext, useContext, useMemo } from 'react'
+import * as Sentry from '@sentry/react'
+import { createContext, useContext, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
 import { authClient } from '#/services/auth/client'
@@ -15,6 +16,12 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending } = authClient.useSession()
+
+  // Opaque better-auth `sub` only — mirrors the backend user-context middleware.
+  useEffect(() => {
+    const id = session?.user.id
+    Sentry.setUser(id ? { id } : null)
+  }, [session?.user.id])
 
   const value: AuthContextValue = useMemo(
     () => ({
