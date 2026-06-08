@@ -16,10 +16,6 @@ const DEV_INVENTORY_FILE = resolve(
   '../../../../infra/triton/model-inventory.dev.json',
 )
 
-const DEV_GARAGE_RPC_SECRET =
-  '0000000000000000000000000000000000000000000000000000000000000000'
-const DEV_GARAGE_ADMIN_TOKEN = 'dev-admin-token'
-
 const NodeEnv = z.enum(['development', 'production', 'test'])
 
 const env = {
@@ -152,16 +148,6 @@ const storage = {
   garageSecretAccessKey: secretField({
     envName: 'GARAGE_SECRET_ACCESS_KEY',
     description: 'S3-style secret key for the gateway-facing Garage bucket.',
-    type: z.string().min(1),
-  }),
-  garageRpcSecret: secretField({
-    envName: 'GARAGE_RPC_SECRET',
-    description: 'Garage cluster RPC secret (64-hex). openssl rand -hex 32.',
-    type: z.string().min(1),
-  }),
-  garageAdminToken: secretField({
-    envName: 'GARAGE_ADMIN_TOKEN',
-    description: 'Garage admin API token.',
     type: z.string().min(1),
   }),
 }
@@ -352,18 +338,6 @@ export function assertProductionInvariants(cfg: Config): void {
     }
   }
 
-  if (cfg.storage.garageRpcSecret === DEV_GARAGE_RPC_SECRET) {
-    issues.push(
-      'GARAGE_RPC_SECRET is the dev placeholder — generate with: openssl rand -hex 32',
-    )
-  }
-
-  if (cfg.storage.garageAdminToken === DEV_GARAGE_ADMIN_TOKEN) {
-    issues.push(
-      'GARAGE_ADMIN_TOKEN is the dev placeholder — set it to a strong random token',
-    )
-  }
-
   if (!cfg.models.artifactRef) {
     issues.push(
       'MODEL_ARTIFACT_REF must be set in production (digest-pinned OCI model-repo)',
@@ -401,8 +375,6 @@ export const TEST_ENV: NodeJS.ProcessEnv = {
   GARAGE_BUCKET: 'protifer-test',
   GARAGE_ACCESS_KEY_ID: 'test-ak',
   GARAGE_SECRET_ACCESS_KEY: 'test-sk',
-  GARAGE_RPC_SECRET: 'a'.repeat(64),
-  GARAGE_ADMIN_TOKEN: 'test-admin-token',
 }
 
 export function makeTestConfig(overrides: NodeJS.ProcessEnv = {}): Config {

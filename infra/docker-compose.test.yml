@@ -124,8 +124,6 @@ services:
       <<: *worker-env
       NODE_ENV: test
       PORT: '3001'
-      GARAGE_RPC_SECRET: '0000000000000000000000000000000000000000000000000000000000000000'
-      GARAGE_ADMIN_TOKEN: 'dev-admin-token'
       DATABASE_URL: 'postgresql://protifer:protifer@postgres:5432/protifer'
       BETTER_AUTH_SECRET: 'test-secret-at-least-sixteen-characters'
       BETTER_AUTH_BASE_URL: 'http://localhost:3001'
