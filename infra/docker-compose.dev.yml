@@ -1,11 +1,10 @@
 # Self-contained dev stack — single host, mock-triton instead of GPU Triton.
-# Mirrors prod topology (postgres + redis + garage + workers + api-gateway)
-# behind a Caddy gateway so the dev URL surface stays close to prod.
+# Mirrors prod topology (postgres + redis + garage + workers + api-gateway).
 #
 # Run: docker compose -f infra/docker-compose.dev.yml --env-file infra/.env.dev up
 #
-# Caddy on :9090 → api-gateway:3001 (the FE dev server still runs out-of-stack
-# on :5173 and reverse-proxies to :9090 for /api/auth and /v1).
+# api-gateway publishes :9090 → container :3001. The FE dev server runs
+# out-of-stack on :5173 and proxies /api, /v1, /docs, /admin, etc. to :9090.
 name: protifer-dev
 
 x-logging: &default-logging
@@ -106,6 +105,7 @@ services:
       GARAGE_KEY_ID: ${AWS_ACCESS_KEY_ID:-GK000000000000000000000000}
       GARAGE_KEY_SECRET: ${AWS_SECRET_ACCESS_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
       GARAGE_BUCKET: *garage-bucket
+      GARAGE_LAYOUT_CAPACITY: ${GARAGE_LAYOUT_CAPACITY:-10737418240}
     depends_on:
       garage:
         condition: service_started
@@ -137,11 +137,11 @@ services:
     profiles: ['cpu-triton']
     image: ghcr.io/oras-project/oras:v1.2.0
     environment:
-      MODEL_ARTIFACT_REF: ${MODEL_ARTIFACT_REF:-registry:5000/<org>/model-repo:dev}
+      MODEL_ARTIFACT_REF: ${MODEL_ARTIFACT_REF:-ghcr.io/t03i/protifer-models:latest}
     entrypoint:
       - sh
       - -c
-      - 'rm -rf /data/* && oras pull --plain-http "$$MODEL_ARTIFACT_REF" -o /data'
+      - 'rm -rf /data/* && oras pull "$$MODEL_ARTIFACT_REF" -o /data'
     volumes:
       - triton-models:/data
     restart: 'no'
@@ -154,8 +154,6 @@ services:
       - tritonserver
       - --model-repository=/data/models
       - --model-control-mode=none
-      # Configs are strict/complete; skip the auto-complete stub pass (it can fail
-      # to resolve the conda exec env, blocking python-backend models).
       - --disable-auto-complete-config
       - --log-verbose=0
     ports:
@@ -199,6 +197,8 @@ services:
       context: ..
       dockerfile: services/api-gateway/Dockerfile
     command: ['bun', '--watch', 'src/index.ts']
+    ports:
+      - '127.0.0.1:9090:3001'
     env_file:
       - .env.dev
     environment:
@@ -279,20 +279,6 @@ services:
         condition: service_healthy
     mem_limit: 2g
     cpus: '2.0'
-    restart: unless-stopped
-    logging: *default-logging
-
-  caddy:
-    image: caddy:2-alpine@sha256:6d125e80883be8a2bef5f088c7535945b42cdbb8a0f5471bf36eaf18dc0638f1
-    ports:
-      - '127.0.0.1:9090:80'
-    volumes:
-      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
-    depends_on:
-      api-gateway:
-        condition: service_healthy
-    mem_limit: 256m
-    cpus: '0.5'
     restart: unless-stopped
     logging: *default-logging
 
