@@ -111,14 +111,58 @@
       read credential. The C1 same-digest invariant (gateway + init share one
       `MODEL_ARTIFACT_REF`) is part of this hand-off.
 
+## 8. Fix artifact layout — env split + empty version dirs (Decision 8)
+
+> Found while booting Triton from a real pulled artifact: `_envs/` polled as a
+> model (fatal under `--exit-on-error`, defaults true) and empty ensemble version
+> dirs dropped by the OCI round-trip. Corrects work checked off in §1.
+
+- [x] 8.1 `build-model-artifact.py`: stage configs under `staging/models/` and the
+      conda env under `staging/envs/cpu_py312.tar.gz` (was `staging/_envs/…`).
+      Update `model_dirs()`, `build_inventory()` (drop the now-dead `_envs` skip),
+      `check_onnx()`, and `collect_blobs()` to walk the `models/` subtree.
+- [x] 8.2 `build-model-artifact.py`: for every ensemble (`platform: "ensemble"`)
+      model dir, materialize a carried, byte-stable `.keep` placeholder (0 bytes,
+      fixed name) in its numeric version dir so oras carries the otherwise-empty
+      directory; remove `.keep` from any exclude set. (`.gitkeep` in the source
+      tree stays for git but stays excluded — the build guarantees the dir, so a
+      new ensemble can't silently lose its version dir.) Note: `model_dir_version`
+      hashes all files, so the placeholder enters the ensemble's content version —
+      keep it deterministic (or exclude it from the hash) so rebuilds are stable.
+- [x] 8.3 Repoint the 3 python `config.pbtxt` (`_internal_prott5_tokenizer`,
+      `_tmbed_viterbi`, deferred `_internal_esm2_tokenizer`) `EXECUTION_ENV_PATH`
+      to `$$TRITON_MODEL_DIRECTORY/../../envs/cpu_py312.tar.gz` (mount-agnostic).
+- [x] 8.4 Dev `cpu-triton` profile: `oras pull -o /data`, mount at `/data`,
+      `--model-repository=/data/models` (was `-o /models` + `/models`). Keep the
+      `rm -rf` fresh-dir + completion gating.
+- [x] 8.5 `check-model-repository-layout.py`: confirm it still passes against the
+      source tree (ensemble version dirs present via `.gitkeep`); no env-path
+      assertions needed (pbtxt path is relative).
+- [x] 8.6 Rebuild + push a fresh artifact; boot Triton with the **default**
+      `--exit-on-error` (true) and confirm all models + ensembles reach READY with
+      no `_envs`/version-dir errors. Re-pin the new digest. (Verified locally:
+      real weighted artifact → oras round-trip → cpu-triton boot reaches **22/22
+      READY, 0 UNAVAILABLE, health 200**, no fatal exit. Required adding
+      `--disable-auto-complete-config` (configs are strict; the auto-complete stub
+      otherwise fails to resolve the conda exec env). Prod digest re-pin is the
+      deploy-repo action.)
+- [x] 8.7 Hand the layout contract change to the deploy repo (paste, not a
+      tracked file): `models/`+`envs/` siblings, `-o /data`,
+      `--model-repository=/data/models`, fresh-digest re-pin.
+
 ## 7. Quality gates
 
 - [x] 7.1 `bun run typecheck && bun run lint && bun run format && bun run test`
-- [ ] 7.2 `bun run test:int` (stack up) — pipeline caches/keys by per-model version
+- [x] 7.2 `bun run test:int` (stack up) — pipeline caches/keys by per-model version
+      (verified via CI "Backend E2E" job, green on PR #5).
 - [x] 7.3 Python guard suite green after removals
 - [x] 7.4 `bun run build`
-- [ ] 7.5 Manual: dedup drill — change one model, rebuild+push, confirm only that
-      model's blobs transfer (unchanged blobs skipped).
-- [ ] 7.6 Manual: rollback drill — deploy A, deploy B, repin A's digest, confirm
-      `/models` == A with no host touch.
-- [ ] 7.7 PR; check CI ~5 min after open.
+- [x] 7.5 Manual: dedup drill — change one model, rebuild+push, confirm only that
+      model's blobs transfer (unchanged blobs skipped). (Verified: changing one
+      config made B's push upload only that file + the tiny inventory blob; 194
+      blobs skipped as `Exists`, zero `.onnx` re-transferred.)
+- [x] 7.6 Manual: rollback drill — deploy A, deploy B, repin A's digest, confirm
+      `/models` == A with no host touch. (Verified: re-pinning A's digest re-pulls
+      a byte-identical tree; A vs B differ only in the one changed config.)
+- [x] 7.7 PR; check CI ~5 min after open. (PR #5; all CI checks green incl.
+      Backend E2E, layout guard, typecheck/lint/test, docker builds.)

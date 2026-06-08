@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -36,7 +37,7 @@ DEFAULT_IMAGE_SOURCE = "https://github.com/t03i/protifer"
 DEFAULT_IMAGE_LICENSES = "Apache-2.0"
 DEFAULT_IMAGE_DESCRIPTION = "protifer Triton model repository (OCI artifact)"
 ENV_DOCKERFILE = Path("infra/triton/Dockerfile.modelenv")
-ENV_TARBALL_REL = "_envs/cpu_py312.tar.gz"
+ENV_TARBALL_REL = "envs/cpu_py312.tar.gz"
 ENV_TARBALL_IN_IMAGE = "/opt/protifer/cpu_py312.tar.gz"
 
 EXCLUDE_NAMES = {"__pycache__", ".DS_Store", ".gitkeep", ".gitignore", ".installed-sha256"}
@@ -137,12 +138,14 @@ def _file_sha256(path: Path) -> str:
 
 
 def build_conda_env(
-    repo_root: Path, staging: Path, cache_dir: Path, *, no_cache: bool
+    staging_root: Path, repo_root: Path, cache_dir: Path, *, no_cache: bool
 ) -> None:
-    """Build cpu_py312.tar.gz in a linux/amd64 docker stage; stage under _envs/.
+    """Build cpu_py312.tar.gz in a linux/amd64 docker stage; stage under envs/.
 
-    Cached by the env Dockerfile's content hash so weight-only rebuilds reuse the
-    identical blob (Decisions 5/1b).
+    `envs/` is a sibling of `models/` under the staging root (Decision 8), so the
+    env tarball is never inside Triton's model-scan scope. Cached by the env
+    Dockerfile's content hash so weight-only rebuilds reuse the identical blob
+    (Decisions 5/1b).
     """
     dockerfile = repo_root / ENV_DOCKERFILE
     if not dockerfile.exists():
@@ -151,7 +154,7 @@ def build_conda_env(
     key = _file_sha256(dockerfile)
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached = cache_dir / f"cpu_py312-{key}.tar.gz"
-    staged = staging / ENV_TARBALL_REL
+    staged = staging_root / ENV_TARBALL_REL
     staged.parent.mkdir(parents=True, exist_ok=True)
 
     if cached.exists() and not no_cache:
@@ -193,19 +196,19 @@ def build_conda_env(
 # ---------------------------------------------------------------------------
 
 
-def check_onnx(staging: Path) -> None:
+def check_onnx(models_dir: Path) -> None:
     """Run onnx.checker over every */1/model.onnx by path-string (avoids OOM).
 
     Raises on the first structural error.
     """
-    models = sorted(staging.glob("*/1/model.onnx"))
+    models = sorted(models_dir.glob("*/1/model.onnx"))
     if not models:
         logger.info("No */1/model.onnx present; skipping ONNX checks (config-only).")
         return
     import onnx  # lazy: keep --help / dry paths import-free
 
     for m in models:
-        logger.info("onnx.checker: %s", m.relative_to(staging))
+        logger.info("onnx.checker: %s", m.relative_to(models_dir))
         try:
             onnx.checker.check_model(str(m))
         except onnx.checker.ValidationError as e:
@@ -230,13 +233,34 @@ def model_dir_version(model_dir: Path) -> str:
     return h.hexdigest()
 
 
-def build_inventory(staging: Path) -> dict:
-    """Assemble the typed inventory config blob from the staged tree."""
-    models = []
-    for d in model_dirs(staging):
-        # _envs is a staged tree dir, not a model.
-        if d.name == "_envs":
+def materialize_ensemble_placeholders(model_repo: Path, models_dir: Path) -> None:
+    """Carry empty ensemble version dirs through the OCI round-trip (Decision 8).
+
+    oras stores files, not directories; ensemble version dirs hold only .gitkeep
+    (excluded), so without a carried file `oras pull` never recreates them and the
+    ensemble has no version dir to load. Write a 0-byte `.keep` placeholder (fixed
+    name → deterministic, so it enters model_dir_version stably) into each
+    ensemble's numeric version dir.
+    """
+    for src in model_dirs(model_repo):
+        config = src / "config.pbtxt"
+        if not config.exists():
             continue
+        if not re.search(r'platform:\s*"ensemble"', config.read_text()):
+            continue
+        for vdir in sorted(
+            d for d in src.iterdir() if d.is_dir() and d.name.isdigit()
+        ):
+            keep = models_dir / src.name / vdir.name / ".keep"
+            keep.parent.mkdir(parents=True, exist_ok=True)
+            keep.touch()
+            logger.info("Carried ensemble version dir: %s", keep.relative_to(models_dir))
+
+
+def build_inventory(models_dir: Path) -> dict:
+    """Assemble the typed inventory config blob from the staged models/ tree."""
+    models = []
+    for d in model_dirs(models_dir):
         if not (d / "config.pbtxt").exists():
             continue
         mapping = MODEL_MAP.get(d.name)
@@ -256,15 +280,16 @@ def build_inventory(staging: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def collect_blobs(staging: Path) -> list[str]:
-    """oras file args: '<relpath>:<mediaType>' for every staged file.
+def collect_blobs(staging_root: Path) -> list[str]:
+    """oras file args: every staged file under the staging root (models/ + envs/).
 
-    Relative paths preserve the tree layout (oras stores them in the title
-    annotation; `oras pull` reconstructs the directory).
+    Relative paths (e.g. `models/tmbed/config.pbtxt`, `envs/cpu_py312.tar.gz`)
+    preserve the two-tree layout (oras stores them in the title annotation;
+    `oras pull -o /data` reconstructs `/data/models` + `/data/envs`).
     """
     args = []
-    for f in sorted(p for p in staging.rglob("*") if p.is_file()):
-        rel = f.relative_to(staging).as_posix()
+    for f in sorted(p for p in staging_root.rglob("*") if p.is_file()):
+        rel = f.relative_to(staging_root).as_posix()
         args.append(rel)
     return args
 
@@ -388,39 +413,43 @@ def main() -> int:
     ref = f"ghcr.io/{args.org}/{args.repo}:{args.tag}"
 
     with tempfile.TemporaryDirectory(prefix="model-artifact-") as tmp:
-        staging = Path(tmp) / "models"
-        staging.mkdir(parents=True)
+        # Two sibling trees under the staging root (Decision 8): models/ (Triton's
+        # model repository) and envs/ (the conda env, never model-scanned).
+        staging_root = Path(tmp) / "staging"
+        models_dir = staging_root / "models"
+        models_dir.mkdir(parents=True)
 
-        stage_configs(model_repo, staging)
+        stage_configs(model_repo, models_dir)
         overlay_weights(
             Path(args.weights_root).resolve() if args.weights_root else None,
-            staging,
+            models_dir,
         )
+        materialize_ensemble_placeholders(model_repo, models_dir)
 
         if args.skip_env:
             logger.info("--skip-env: conda env not built.")
         else:
             try:
                 build_conda_env(
-                    repo_root, staging, cache_dir, no_cache=args.no_cache
+                    staging_root, repo_root, cache_dir, no_cache=args.no_cache
                 )
             except (subprocess.SubprocessError, FileNotFoundError) as exc:
                 logger.error("Conda env build failed: %s", exc)
                 return 1
 
         try:
-            check_onnx(staging)
+            check_onnx(models_dir)
         except RuntimeError as exc:
             logger.error("%s", exc)
             return 1
 
-        inventory = build_inventory(staging)
+        inventory = build_inventory(models_dir)
         logger.info("Inventory: %d model(s)", len(inventory["models"]))
 
         config_path = Path(tmp) / "inventory.json"
         config_path.write_text(json.dumps(inventory, indent=2) + "\n")
 
-        blob_args = collect_blobs(staging)
+        blob_args = collect_blobs(staging_root)
         annotations = {
             "org.opencontainers.image.source": args.image_source,
             "org.opencontainers.image.licenses": args.image_licenses,
@@ -430,8 +459,8 @@ def main() -> int:
 
         if args.dry_run:
             logger.info("Dry run — would push %d blob(s) to %s", len(blob_args), ref)
-            # cwd of the real push is the staging dir (relative blob paths).
-            print(f"cd {staging} && \\")
+            # cwd of the real push is the staging root (relative blob paths).
+            print(f"cd {staging_root} && \\")
             print(" ".join(cmd))
             return 0
 
@@ -444,7 +473,7 @@ def main() -> int:
 
         logger.info("oras push %d blob(s) → %s", len(blob_args), ref)
         try:
-            subprocess.run(cmd, check=True, cwd=str(staging))
+            subprocess.run(cmd, check=True, cwd=str(staging_root))
         except subprocess.SubprocessError as exc:
             logger.error("oras push failed: %s", exc)
             return 1
