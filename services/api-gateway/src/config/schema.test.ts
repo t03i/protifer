@@ -26,8 +26,6 @@ const VALID_ENV = {
   GARAGE_BUCKET: 'protifer',
   GARAGE_ACCESS_KEY_ID: 'ak',
   GARAGE_SECRET_ACCESS_KEY: 'sk',
-  GARAGE_RPC_SECRET: 'a'.repeat(64),
-  GARAGE_ADMIN_TOKEN: 'admin-token-xyz',
 }
 
 describe('loadConfig', () => {
@@ -73,27 +71,6 @@ describe('loadConfig', () => {
     }
   })
 
-  it('production rejects dev Garage placeholders', () => {
-    expect.assertions(3)
-    try {
-      loadConfig({
-        ...VALID_ENV,
-        NODE_ENV: 'production',
-        BETTER_AUTH_BASE_URL: 'https://api.example.com',
-        CORS_ORIGINS: 'https://app.example.com',
-        GARAGE_RPC_SECRET: '0'.repeat(64),
-        GARAGE_ADMIN_TOKEN: 'dev-admin-token',
-      })
-    } catch (e) {
-      expect(e).toBeInstanceOf(ProductionConfigError)
-      const err = e as ProductionConfigError
-      expect(err.issues.some((i) => i.includes('GARAGE_RPC_SECRET'))).toBe(true)
-      expect(err.issues.some((i) => i.includes('GARAGE_ADMIN_TOKEN'))).toBe(
-        true,
-      )
-    }
-  })
-
   it('production rejects DEV_OVERRIDE_AUTH=true', () => {
     expect.assertions(2)
     try {
@@ -102,8 +79,6 @@ describe('loadConfig', () => {
         NODE_ENV: 'production',
         BETTER_AUTH_BASE_URL: 'https://api.example.com',
         CORS_ORIGINS: 'https://app.example.com',
-        GARAGE_RPC_SECRET: 'a'.repeat(64),
-        GARAGE_ADMIN_TOKEN: 'real-admin-token-xyz',
         DEV_OVERRIDE_AUTH: 'true',
       })
     } catch (e) {
@@ -121,8 +96,6 @@ describe('loadConfig', () => {
         NODE_ENV: 'production',
         BETTER_AUTH_BASE_URL: 'http://api.example.com',
         CORS_ORIGINS: 'https://app.example.com',
-        GARAGE_RPC_SECRET: 'a'.repeat(64),
-        GARAGE_ADMIN_TOKEN: 'real-admin-token-xyz',
       })
     } catch (e) {
       expect(e).toBeInstanceOf(ProductionConfigError)
@@ -143,8 +116,6 @@ describe('loadConfig', () => {
         NODE_ENV: 'production',
         BETTER_AUTH_BASE_URL: 'https://api.example.com',
         CORS_ORIGINS: 'https://app.example.com,http://other.example.com',
-        GARAGE_RPC_SECRET: 'a'.repeat(64),
-        GARAGE_ADMIN_TOKEN: 'real-admin-token-xyz',
       })
     } catch (e) {
       expect(e).toBeInstanceOf(ProductionConfigError)
@@ -162,8 +133,6 @@ describe('loadConfig', () => {
     NODE_ENV: 'production',
     BETTER_AUTH_BASE_URL: 'https://api.example.com',
     CORS_ORIGINS: 'https://app.example.com,https://*.example.com',
-    GARAGE_RPC_SECRET: 'a'.repeat(64),
-    GARAGE_ADMIN_TOKEN: 'real-admin-token-xyz',
     MODEL_ARTIFACT_REF: `ghcr.io/org/model-repo@sha256:${'a'.repeat(64)}`,
   }
 
@@ -205,8 +174,8 @@ describe('loadConfig', () => {
   it('describes every field with kind metadata', () => {
     const docs = ConfigSchema.describe()
     expect(docs.length).toBeGreaterThan(15)
-    const garageRpc = docs.find((d) => d.envName === 'GARAGE_RPC_SECRET')
-    expect(garageRpc?.kind).toBe('secret')
+    const garageKey = docs.find((d) => d.envName === 'GARAGE_ACCESS_KEY_ID')
+    expect(garageKey?.kind).toBe('secret')
     const port = docs.find((d) => d.envName === 'PORT')
     expect(port?.kind).toBe('config')
     expect(port?.hasDefault).toBe(true)
