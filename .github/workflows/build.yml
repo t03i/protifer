@@ -81,6 +81,12 @@ jobs:
       - name: Build SPA
         env:
           VITE_GATEWAY_URL: ${{ vars.VITE_GATEWAY_URL }}
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_GIT_SHA: ${{ github.sha }}
+          # Source-map upload happens in-build (@sentry/vite-plugin).
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: bun run --filter @protifer/web build
 
       - name: Upload tagged version and promote
@@ -166,6 +172,30 @@ jobs:
             -e MIMIR_ADDRESS -e MIMIR_TENANT_ID -e MIMIR_API_KEY \
             grafana/mimirtool:2.17.11 \
             rules sync /rules.yml --namespaces protifer
+
+  sentry-pii-sync:
+    name: Sync Sentry data-scrubbing config
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: deploy
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: PATCH project relayPiiConfig
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          # relayPiiConfig is a JSON *string* on the project option.
+          body=$(jq -nc --arg c "$(jq -c . infra/observability/sentry-pii.json)" \
+            '{relayPiiConfig: $c}')
+          curl -fsS -X PUT \
+            "https://sentry.io/api/0/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/" \
+            -H "Authorization: Bearer ${SENTRY_AUTH_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d "$body" >/dev/null
 
   notify-sentry-release:
     needs: bump-deploy-tags

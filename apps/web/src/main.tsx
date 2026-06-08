@@ -9,6 +9,11 @@ import { AuthModalProvider } from '#/features/auth/components/AuthModalProvider'
 import type { AuthContextValue } from '#/features/auth/context'
 import { AuthProvider, useAuthContext } from '#/features/auth/context'
 import { FeatureFlagsMount } from '#/features/flags'
+import { makeSentryLogger, setLogger } from '#/lib/logger'
+import { initFrontendSentry } from '#/lib/sentry'
+
+initFrontendSentry()
+if (import.meta.env['VITE_SENTRY_DSN']) setLogger(makeSentryLogger())
 
 const queryClient = new QueryClient()
 
