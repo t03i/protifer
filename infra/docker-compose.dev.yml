@@ -138,10 +138,37 @@ services:
     image: ghcr.io/oras-project/oras:v1.2.0
     environment:
       MODEL_ARTIFACT_REF: ${MODEL_ARTIFACT_REF:-ghcr.io/t03i/protifer-models:latest}
+      MODEL_INIT_FORCE: ${MODEL_INIT_FORCE:-0}
     entrypoint:
       - sh
       - -c
-      - 'rm -rf /data/* && oras pull "$$MODEL_ARTIFACT_REF" -o /data'
+      - |
+        set -e
+        REF="$$MODEL_ARTIFACT_REF"
+        MARKER=/data/.artifact-digest
+        have=$$(cat "$$MARKER" 2>/dev/null || true)
+
+        case "$$REF" in
+          *@sha256:*) want="$${REF##*@}" ;;
+          *)          want=$$(oras resolve "$$REF" 2>/dev/null || true) ;;
+        esac
+
+        if [ "$${MODEL_INIT_FORCE:-0}" != "1" ] && [ -n "$$have" ] && [ -d /data/models ] \
+           && { [ "$$want" = "$$have" ] || [ -z "$$want" ]; }; then
+          if [ -z "$$want" ]; then
+            echo "model-init: WARN serving UNVERIFIED cached $$have (could not resolve $$REF); set MODEL_INIT_FORCE=1 to re-pull"
+          else
+            echo "model-init: cache hit ($$have); skipping pull of $$REF"
+          fi
+          exit 0
+        fi
+
+        echo "model-init: pulling $$REF (have=$${have:-none} want=$${want:-unresolved})"
+        rm -f "$$MARKER"; rm -rf /data/*
+        oras pull "$$REF" -o /data
+        [ -z "$$want" ] && want=$$(oras resolve "$$REF" 2>/dev/null || true)
+        printf '%s\n' "$$want" > "$$MARKER"
+        echo "model-init: pull complete ($$want)"
     volumes:
       - triton-models:/data
     restart: 'no'
