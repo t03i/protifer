@@ -119,7 +119,6 @@ describe('useStatusPageApi', () => {
       wrapper: wrapper(queryClient),
     })
 
-    // Give the query a tick to resolve, then assert it stays undefined.
     await waitFor(() => expect(result.current).toBeUndefined())
   })
 

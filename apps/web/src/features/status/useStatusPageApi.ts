@@ -6,10 +6,6 @@ function isValidResponse(data: unknown): data is BetterStackStatusResponse {
   return typeof data === 'object' && data !== null
 }
 
-// Map Better Stack's aggregate_state to our ServiceKind. Better Stack uses
-// "downtime"; we surface it as "down". An unrecognised/missing state yields
-// undefined so the caller falls through to the neutral default rather than
-// guessing "operational".
 function deriveKind(data: BetterStackStatusResponse): ServiceKind | undefined {
   switch (data.data?.attributes?.aggregate_state) {
     case 'operational':

@@ -32,8 +32,6 @@ const STATUS_CONFIG: Record<
     banner: 'bg-red-700 text-white',
     text: 'Service is currently down.',
   },
-  // Neutral: status unverified (no working status signal). Quiet grey dot,
-  // no alarming banner — but explicitly not the green "operational" state.
   unknown: {
     dot: 'bg-gray-400',
     banner: null,
