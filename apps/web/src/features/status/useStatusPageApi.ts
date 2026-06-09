@@ -6,37 +6,49 @@ function isValidResponse(data: unknown): data is BetterStackStatusResponse {
   return typeof data === 'object' && data !== null
 }
 
-function deriveKind(data: BetterStackStatusResponse): ServiceKind {
-  const resources = data.resources ?? []
-  const reports = data.status_reports ?? []
-
-  if (reports.some((r) => r.status === 'maintenance')) return 'maintenance'
-  if (resources.some((r) => r.status === 'down')) return 'down'
-  if (resources.some((r) => r.status === 'degraded')) return 'degraded'
-  if (resources.some((r) => r.status === 'maintenance')) return 'maintenance'
-  return 'operational'
+// Map Better Stack's aggregate_state to our ServiceKind. Better Stack uses
+// "downtime"; we surface it as "down". An unrecognised/missing state yields
+// undefined so the caller falls through to the neutral default rather than
+// guessing "operational".
+function deriveKind(data: BetterStackStatusResponse): ServiceKind | undefined {
+  switch (data.data?.attributes?.aggregate_state) {
+    case 'operational':
+      return 'operational'
+    case 'degraded':
+      return 'degraded'
+    case 'downtime':
+      return 'down'
+    case 'maintenance':
+      return 'maintenance'
+    default:
+      return undefined
+  }
 }
 
 export function useStatusPageApi():
   | { kind: ServiceKind; detail?: string }
   | undefined {
-  const apiUrl = import.meta.env['VITE_STATUS_API_URL'] as string | undefined
+  const statusPageUrl = import.meta.env['VITE_STATUS_PAGE_URL'] as
+    | string
+    | undefined
 
   const { data } = useQuery({
     queryKey: ['status-page-api'] as const,
     queryFn: async ({ signal }): Promise<BetterStackStatusResponse> => {
-      const res = await fetch(`${apiUrl}/api/v1/status`, { signal })
+      const res = await fetch(`${statusPageUrl}/index.json`, { signal })
       if (!res.ok) throw new Error(`Status API ${res.status}`)
       return res.json() as Promise<BetterStackStatusResponse>
     },
-    enabled: Boolean(apiUrl),
+    enabled: Boolean(statusPageUrl),
     refetchInterval: 60_000,
     staleTime: 60_000,
     retry: false,
   })
 
-  if (!data) return undefined
-  if (!isValidResponse(data)) return undefined
+  if (!data || !isValidResponse(data)) return undefined
 
-  return { kind: deriveKind(data) }
+  const kind = deriveKind(data)
+  if (!kind) return undefined
+
+  return { kind }
 }
