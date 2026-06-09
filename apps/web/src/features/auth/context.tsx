@@ -33,8 +33,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           redirectTo.startsWith('/') && !redirectTo.startsWith('//')
             ? redirectTo
             : '/'
-        // Absolute URL so better-auth redirects back to the SPA, not its own
-        // baseURL host (the gateway). VITE_APP_URL is an optional override.
         const appURL = import.meta.env['VITE_APP_URL'] || window.location.origin
         return authClient.signIn.social({
           provider: 'github',
