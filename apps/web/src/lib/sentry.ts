@@ -20,12 +20,6 @@ function scrubRecord(data: Record<string, unknown>): void {
   }
 }
 
-/**
- * In-browser PII scrub before an event is sent: strip query strings, redact
- * sequence-input field values by key, then redact any ≥20-residue amino-acid
- * run from free-text/data fields via the shared `scrubAminoAcidRuns` (the
- * primary defense — there is no server-side `relayPiiConfig` net behind it).
- */
 function beforeSend(event: ErrorEvent, _hint: EventHint): ErrorEvent {
   if (event.request) {
     event.request.url = stripQuery(event.request.url) as string | undefined

@@ -1,20 +1,10 @@
-/**
- * Canonical amino-acid run: ≥20 single-letter residues. Mirrors the pattern
- * that used to live in `infra/observability/sentry-pii.json` (server-side
- * `relayPiiConfig`). Global so `replace` redacts every occurrence in a string.
- */
 export const AMINO_ACID_RUN = /[ACDEFGHIKLMNPQRSTVWY]{20,}/g
 
 const FILTERED = '[Filtered]'
 const MAX_DEPTH = 8
 
-/**
- * Structural subset of a Sentry `ErrorEvent` covering the free-text and
- * data-bearing fields we scrub. Deliberately not the SDK's `ErrorEvent` type:
- * `@sentry/node` and `@sentry/react` can resolve to different `@sentry/core`
- * versions whose nominal `ErrorEvent` types don't unify. A structural shape
- * accepts both and keeps this package SDK-version-agnostic.
- */
+// Structural, not the SDK's `ErrorEvent`: @sentry/node and @sentry/react can
+// resolve to different @sentry/core versions whose nominal types don't unify.
 export interface ScrubbableEvent {
   message?: string
   exception?: { values?: Array<{ value?: string }> }
@@ -66,13 +56,8 @@ function redactDeep(
   }
 }
 
-/**
- * `beforeSend` scrub: redact ≥20-residue amino-acid runs from the free-text and
- * data-bearing fields of a Sentry event, in place. This is the in-SDK primary
- * defense (Sentry's recommended layer) that replaces the Business-plan-gated
- * server-side `relayPiiConfig` net. Returns the same event so it drops straight
- * into `Sentry.init({ beforeSend })`.
- */
+// `beforeSend` scrub: redact ≥20-residue amino-acid runs from a Sentry event
+// in place, returning it.
 export function scrubAminoAcidRuns<E extends ScrubbableEvent>(event: E): E {
   const seen = new WeakSet<object>()
 
