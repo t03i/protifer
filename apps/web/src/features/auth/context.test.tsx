@@ -52,7 +52,7 @@ describe('useAuthContext', () => {
     })
   })
 
-  it('login calls authClient.signIn.social with provider github', () => {
+  it('login defaults callbackURL to the current origin when VITE_APP_URL is unset', () => {
     vi.stubEnv('VITE_APP_URL', '')
     vi.mocked(authClient.useSession).mockReturnValue({
       data: null,
@@ -67,7 +67,7 @@ describe('useAuthContext', () => {
     result.current.login('/history')
     expect(authClient.signIn.social).toHaveBeenCalledWith({
       provider: 'github',
-      callbackURL: '/history',
+      callbackURL: `${window.location.origin}/history`,
     })
   })
 
@@ -105,7 +105,7 @@ describe('useAuthContext', () => {
     result.current.login('//evil.com/phish')
     expect(authClient.signIn.social).toHaveBeenCalledWith({
       provider: 'github',
-      callbackURL: '/',
+      callbackURL: `${window.location.origin}/`,
     })
   })
 
