@@ -23,7 +23,8 @@ USER bun
 # we don't depend on curl/wget being present in the alpine image. For
 # dep-aware readiness, point the orchestrator's separate readiness probe at
 # /ready (returns 503 when Redis/Postgres are down).
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD bun -e "fetch('http://127.0.0.1:'+(process.env.PORT||'3001')+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD bun -e "fetch('http://localhost:'+(process.env.PORT||'3001')+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["bun", "src/index.ts"]
