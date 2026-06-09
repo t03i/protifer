@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           redirectTo.startsWith('/') && !redirectTo.startsWith('//')
             ? redirectTo
             : '/'
-        const appURL = import.meta.env['VITE_APP_URL'] ?? ''
+        const appURL = import.meta.env['VITE_APP_URL'] || window.location.origin
         return authClient.signIn.social({
           provider: 'github',
           callbackURL: `${appURL}${safePath}`,
