@@ -81,7 +81,7 @@ jobs:
       - name: Build SPA
         env:
           VITE_GATEWAY_URL: ${{ vars.VITE_GATEWAY_URL }}
-          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_STATUS_PAGE_URL: ${{ vars.VITE_STATUS_PAGE_URL }}
           VITE_GIT_SHA: ${{ github.sha }}
           # Source-map upload happens in-build (@sentry/vite-plugin).
