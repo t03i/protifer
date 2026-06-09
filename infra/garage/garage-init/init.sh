@@ -16,6 +16,26 @@ if [ -n "$TOKEN" ]; then
   AUTH=(-H "Authorization: Bearer $TOKEN")
 fi
 
+# Emit the actual reason garage is unreachable. A bare "Not ready"/"Timed out"
+# hides the common failure on proxied hosts: a corporate proxy injected into the
+# container env captures the request to the bare service name `garage` (no
+# NO_PROXY match, not a literal IP) and can't resolve a compose-internal name.
+# Surface curl's real error + the effective proxy env so the cause is obvious.
+diagnose_unreachable() {
+  echo "  --- diagnostics: cannot reach garage admin API ---" >&2
+  echo "  GARAGE_ADMIN_URL=$BASE" >&2
+  echo "  curl says:" >&2
+  curl -sS -o /dev/null "$BASE/health" 2>&1 | sed 's/^/    /' >&2 || true
+  if env | grep -qiE '^(http|https|no)_proxy='; then
+    echo "  proxy env in this container (may be hijacking the request):" >&2
+    env | grep -iE '^(http|https|no)_proxy=' | sed 's/^/    /' >&2
+    echo "  if the proxy is capturing 'garage', clear *_proxy for this container" >&2
+    echo "  or add the service name to NO_PROXY (see deploy-repo proxy runbook)." >&2
+  else
+    echo "  no proxy env set — garage likely not up yet or wrong GARAGE_ADMIN_URL." >&2
+  fi
+}
+
 # --- 1. Wait for admin API ---
 echo "→ Waiting for garage admin API..."
 ATTEMPTS=0
@@ -24,6 +44,7 @@ until curl -sf "$BASE/health" > /dev/null 2>&1; do
   ATTEMPTS=$((ATTEMPTS + 1))
   if [ "$ATTEMPTS" -ge "$MAX_ATTEMPTS" ]; then
     echo "  Timed out waiting for garage after $((MAX_ATTEMPTS * 2))s" >&2
+    diagnose_unreachable
     exit 1
   fi
   echo "  Not ready (attempt $ATTEMPTS/$MAX_ATTEMPTS), retrying in 2s..."
