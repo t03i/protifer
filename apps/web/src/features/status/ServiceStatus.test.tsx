@@ -31,11 +31,25 @@ describe('ServiceStatusDot', () => {
     expect(dot.className).toContain('bg-red-500')
     expect(dot.className).toContain('animate-pulse')
   })
+
+  it('renders a neutral grey dot (not green) when unknown', () => {
+    vi.mocked(useServiceStatus).mockReturnValue({ kind: 'unknown' })
+    render(<ServiceStatusDot />)
+    const dot = screen.getByLabelText('Service status: unknown')
+    expect(dot.className).toContain('bg-gray-400')
+    expect(dot.className).not.toContain('bg-green-500')
+  })
 })
 
 describe('ServiceStatusBanner', () => {
   it('renders nothing when operational', () => {
     vi.mocked(useServiceStatus).mockReturnValue({ kind: 'operational' })
+    const { container } = render(<ServiceStatusBanner />)
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('renders no banner when unknown (neutral, non-alarming)', () => {
+    vi.mocked(useServiceStatus).mockReturnValue({ kind: 'unknown' })
     const { container } = render(<ServiceStatusBanner />)
     expect(container.firstChild).toBeNull()
   })

@@ -11,14 +11,23 @@ function wrapper(queryClient: QueryClient) {
     createElement(QueryClientProvider, { client: queryClient }, children)
 }
 
+function statusJson(aggregate_state: string) {
+  return new Response(
+    JSON.stringify({
+      data: { type: 'status_page', attributes: { aggregate_state } },
+    }),
+    { status: 200 },
+  )
+}
+
 describe('useStatusPageApi', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
 
-  it('returns undefined and makes no fetch when VITE_STATUS_API_URL is unset', () => {
-    vi.stubEnv('VITE_STATUS_API_URL', '')
+  it('returns undefined and makes no fetch when VITE_STATUS_PAGE_URL is unset', () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', '')
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const queryClient = new QueryClient()
 
@@ -30,16 +39,25 @@ describe('useStatusPageApi', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('returns operational when all resources are operational', async () => {
-    vi.stubEnv('VITE_STATUS_API_URL', 'https://betteruptime.com')
+  it('polls <url>/index.json on the configured status page', async () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.protifer.app')
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(statusJson('operational'))
+
+    const queryClient = new QueryClient()
+    renderHook(() => useStatusPageApi(), { wrapper: wrapper(queryClient) })
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe(
+      'https://status.protifer.app/index.json',
+    )
+  })
+
+  it('returns operational when aggregate_state is operational', async () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.protifer.app')
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          resources: [{ id: '1', status: 'operational' }],
-          status_reports: [],
-        }),
-        { status: 200 },
-      ),
+      statusJson('operational'),
     )
 
     const queryClient = new QueryClient()
@@ -51,20 +69,9 @@ describe('useStatusPageApi', () => {
     expect(result.current?.kind).toBe('operational')
   })
 
-  it('returns degraded when any resource is degraded', async () => {
-    vi.stubEnv('VITE_STATUS_API_URL', 'https://betteruptime.com')
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          resources: [
-            { id: '1', status: 'operational' },
-            { id: '2', status: 'degraded' },
-          ],
-          status_reports: [],
-        }),
-        { status: 200 },
-      ),
-    )
+  it('returns degraded when aggregate_state is degraded', async () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.protifer.app')
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(statusJson('degraded'))
 
     const queryClient = new QueryClient()
     const { result } = renderHook(() => useStatusPageApi(), {
@@ -75,18 +82,23 @@ describe('useStatusPageApi', () => {
     expect(result.current?.kind).toBe('degraded')
   })
 
-  it('returns maintenance when a status report has status maintenance', async () => {
-    vi.stubEnv('VITE_STATUS_API_URL', 'https://betteruptime.com')
+  it('maps Better Stack "downtime" to our "down" kind', async () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.protifer.app')
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(statusJson('downtime'))
+
+    const queryClient = new QueryClient()
+    const { result } = renderHook(() => useStatusPageApi(), {
+      wrapper: wrapper(queryClient),
+    })
+
+    await waitFor(() => expect(result.current).toBeDefined())
+    expect(result.current?.kind).toBe('down')
+  })
+
+  it('returns maintenance when aggregate_state is maintenance', async () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.protifer.app')
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          resources: [{ id: '1', status: 'operational' }],
-          status_reports: [
-            { id: '99', status: 'maintenance', message: 'Planned window' },
-          ],
-        }),
-        { status: 200 },
-      ),
+      statusJson('maintenance'),
     )
 
     const queryClient = new QueryClient()
@@ -98,8 +110,20 @@ describe('useStatusPageApi', () => {
     expect(result.current?.kind).toBe('maintenance')
   })
 
+  it('returns undefined for an unrecognised aggregate_state (falls through to neutral)', async () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.protifer.app')
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(statusJson('whatever'))
+
+    const queryClient = new QueryClient()
+    const { result } = renderHook(() => useStatusPageApi(), {
+      wrapper: wrapper(queryClient),
+    })
+
+    await waitFor(() => expect(result.current).toBeUndefined())
+  })
+
   it('returns undefined (no crash) when the status API is unreachable', async () => {
-    vi.stubEnv('VITE_STATUS_API_URL', 'https://betteruptime.com')
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.protifer.app')
     vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(
       new Error('Network error'),
     )
@@ -111,7 +135,6 @@ describe('useStatusPageApi', () => {
       wrapper: wrapper(queryClient),
     })
 
-    // After fetch failure with retry:false, the hook returns undefined gracefully (no crash).
     await waitFor(() => {
       expect(result.current).toBeUndefined()
     })

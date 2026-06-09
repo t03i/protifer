@@ -32,6 +32,11 @@ const STATUS_CONFIG: Record<
     banner: 'bg-red-700 text-white',
     text: 'Service is currently down.',
   },
+  unknown: {
+    dot: 'bg-gray-400',
+    banner: null,
+    text: null,
+  },
 }
 
 /** Small dot indicator placed in the header nav bar. */

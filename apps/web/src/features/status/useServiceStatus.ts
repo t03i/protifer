@@ -11,5 +11,5 @@ export function useServiceStatus(): ServiceStatus {
 
   if (remote) return { kind: remote.kind, detail: remote.detail }
 
-  return { kind: 'operational' }
+  return { kind: 'unknown' }
 }
