@@ -58,23 +58,6 @@ jobs:
             prom/prometheus:v3.10.0 \
             check rules protifer.rules.yml
 
-  sentry-pii-config:
-    name: Validate Sentry scrub config
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Validate sentry-pii.json shape
-        run: |
-          set -euo pipefail
-          f=infra/observability/sentry-pii.json
-          jq -e '.rules and .applications' "$f" >/dev/null
-          # Every rule is a valid pattern rule.
-          jq -e 'all(.rules[]; .type=="pattern" and (.pattern|type=="string")
-            and .redaction.method and .redaction.text)' "$f" >/dev/null
-          # Every applied rule id is defined.
-          jq -e '([.applications[][]] - (.rules|keys)) == []' "$f" >/dev/null
-
   docker-build:
     name: Docker build verification
     # PR-only: build.yml already builds these images on every main push.

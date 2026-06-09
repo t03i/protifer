@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { scrubAminoAcidRuns } from './sentry-scrub.ts'
 import { _resetSentryForTests, initSentry } from './sentry.ts'
 
 afterEach(() => {
@@ -62,6 +63,17 @@ describe('initSentry', () => {
       init,
     })
     expect(init.mock.calls[0]?.[0]).toMatchObject({ release: 'unknown' })
+  })
+
+  it('wires scrubAminoAcidRuns as beforeSend', () => {
+    const init = vi.fn()
+    initSentry('api-gateway', {
+      env: { SENTRY_DSN: 'https://key@sentry.io/1', GIT_SHA: 'abc' },
+      init,
+    })
+    expect(init).toHaveBeenCalledWith(
+      expect.objectContaining({ beforeSend: scrubAminoAcidRuns }),
+    )
   })
 
   it('is idempotent across calls', () => {

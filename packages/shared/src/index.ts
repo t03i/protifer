@@ -46,6 +46,7 @@ export * from './queue.ts'
 // sentry.ts: `_resetSentryForTests` stays internal (tested via direct path).
 export { initSentry } from './sentry.ts'
 export type { InitSentryOptions } from './sentry.ts'
+export { AMINO_ACID_RUN, scrubAminoAcidRuns } from './sentry-scrub.ts'
 export * from './sentry-trace.ts'
 export * from './bootstrap.ts'
 export * from './correlation.ts'
