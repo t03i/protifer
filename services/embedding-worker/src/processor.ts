@@ -41,7 +41,9 @@ export async function processEmbeddingJob(
         {
           name: 'sequences',
           datatype: 'BYTES',
-          shape: [1],
+          // prot_t5_pipeline has max_batch_size > 0, so Triton requires a
+          // leading batch dim: [batch=1, one sequence]. A 1-D [1] is rejected.
+          shape: [1, 1],
           contents: { bytes_contents: [Buffer.from(sequence, 'utf8')] },
         },
       ],

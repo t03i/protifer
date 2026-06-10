@@ -177,7 +177,7 @@ describe('processEmbeddingJob', () => {
     expect(request.model_version).toBeUndefined()
     expect(request.inputs.at(0)?.name).toBe('sequences')
     expect(request.inputs.at(0)?.datatype).toBe('BYTES')
-    expect(request.inputs.at(0)?.shape).toEqual([1])
+    expect(request.inputs.at(0)?.shape).toEqual([1, 1])
     expect(request.outputs.at(0)?.name).toBe('embeddings')
     const stored = await store.get(result.embeddingRef)
     expect(stored.length).toBe(seqLen * 1024 * 2)
