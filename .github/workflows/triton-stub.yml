@@ -1,0 +1,87 @@
+name: Triton stub image
+
+# Builds the dev/CI stub Triton image — a REAL `tritonserver` from the minimal
+# `py3-min` base plus the python backend ONLY, composed via NVIDIA's compose.py
+# and pushed to ghcr.io/t03i/protifer-triton-stub:<triton_version>.
+#
+# No model-repository is baked in: the compose stacks mount the real
+# `model-repository/` read-only and `infra/triton-stub/entrypoint.py` derives the
+# python-backed repo at container boot. So this image only needs rebuilding when
+# the Triton version bumps — and its tag is pinned EQUAL to the production Triton
+# tag (the lockstep that keeps the wire contract honest).
+#
+# Manual / on-bump only. The per-PR integration job does NOT run this; it pulls
+# the already-pushed image from GHCR. See
+# openspec/changes/2026-06-10-real-triton-test-stack.
+#
+# NOTE: unverified end-to-end (compose.py + nvcr auth are infra-gated). Treat the
+# compose step as a starting point; confirm flags against the pinned Triton tag.
+on:
+  workflow_dispatch:
+    inputs:
+      triton_version:
+        description: 'Triton base version — MUST match the production Triton tag (e.g. 25.06)'
+        required: true
+        default: '25.06'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    name: Compose & push stub image
+    runs-on: ubuntu-latest
+    env:
+      TRITON_VERSION: ${{ inputs.triton_version }}
+      IMAGE: ghcr.io/t03i/protifer-triton-stub
+      # nvcr.io layer pulls MAY need a free NGC login (the manifest does not).
+      # Gated on the secret so the workflow runs anonymously if it isn't set.
+      HAS_NGC: ${{ secrets.NGC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - uses: docker/setup-buildx-action@v4
+
+      # compose.py pulls both the full (~11 GB) and min (~6 GB) images to extract
+      # the python backend; reclaim runner space first.
+      - name: Reclaim runner disk
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+
+      - name: Log in to nvcr.io
+        if: ${{ env.HAS_NGC == 'true' }}
+        uses: docker/login-action@v4
+        with:
+          registry: nvcr.io
+          username: $oauthtoken
+          password: ${{ secrets.NGC_API_KEY }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose slim Triton (py3-min + python backend)
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "r${TRITON_VERSION}" \
+            https://github.com/triton-inference-server/server.git triton-server
+          cd triton-server
+          python3 compose.py \
+            --backend python \
+            --image full,nvcr.io/nvidia/tritonserver:${TRITON_VERSION}-py3 \
+            --image min,nvcr.io/nvidia/tritonserver:${TRITON_VERSION}-py3-min \
+            --output-name "${IMAGE}:${TRITON_VERSION}"
+          echo "Composed image size:"
+          docker image ls "${IMAGE}"
+
+      - name: Push
+        run: docker push "${IMAGE}:${TRITON_VERSION}"
