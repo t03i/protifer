@@ -25,10 +25,8 @@ message InferTensorContents {
   repeated bytes  bytes_contents  = 8;
 }
 
-// Field numbers below are the wire contract with Triton's GRPCInferenceService
-// and MUST match KServe v2 (triton-inference-server/common grpc_service.proto).
-// Field 4 (parameters) is intentionally omitted — we never set it — but its
-// number is reserved so the fields we do use keep their canonical positions.
+// Field numbers MUST match KServe v2 (Triton's wire contract). Field 4
+// (parameters) is unused but its number is reserved to keep the rest canonical.
 
 message InferInputTensor {
   string name               = 1;
