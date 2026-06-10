@@ -1,21 +1,5 @@
 name: Triton stub image
 
-# Builds the dev/CI stub Triton image — a REAL `tritonserver` from the minimal
-# `py3-min` base plus the python backend ONLY, composed via NVIDIA's compose.py
-# and pushed to ghcr.io/t03i/protifer-triton-stub:<triton_version>.
-#
-# No model-repository is baked in: the compose stacks mount the real
-# `model-repository/` read-only and `infra/triton-stub/entrypoint.py` derives the
-# python-backed repo at container boot. So this image only needs rebuilding when
-# the Triton version bumps — and its tag is pinned EQUAL to the production Triton
-# tag (the lockstep that keeps the wire contract honest).
-#
-# Manual / on-bump only. The per-PR integration job does NOT run this; it pulls
-# the already-pushed image from GHCR. See
-# openspec/changes/2026-06-10-real-triton-test-stack.
-#
-# NOTE: unverified end-to-end (compose.py + nvcr auth are infra-gated). Treat the
-# compose step as a starting point; confirm flags against the pinned Triton tag.
 on:
   workflow_dispatch:
     inputs:
@@ -35,9 +19,6 @@ jobs:
     env:
       TRITON_VERSION: ${{ inputs.triton_version }}
       IMAGE: ghcr.io/t03i/protifer-triton-stub
-      # nvcr.io layer pulls MAY need a free NGC login (the manifest does not).
-      # Gated on the secret so the workflow runs anonymously if it isn't set.
-      HAS_NGC: ${{ secrets.NGC_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -53,14 +34,6 @@ jobs:
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: true
-
-      - name: Log in to nvcr.io
-        if: ${{ env.HAS_NGC == 'true' }}
-        uses: docker/login-action@v4
-        with:
-          registry: nvcr.io
-          username: $oauthtoken
-          password: ${{ secrets.NGC_API_KEY }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v4

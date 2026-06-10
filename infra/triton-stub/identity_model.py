@@ -1,20 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# -------------------------------------------------------------------
-# Identity stub for the dev/CI Triton test stack.
 #
-# Copied (by entrypoint.py, at container boot) into every LEAF model's
-# `1/model.py` in the derived stub repo. It returns correctly-TYPED,
-# correctly-SHAPED zeros for every declared output, reading its own
-# model_config so one file serves every leaf.
-#
-# It exists so a REAL tritonserver can honour the real config.pbtxt wire
-# contract in dev/CI without any weights or backend beyond python. It
-# validates protocol + shape, NOT numerical output. The real configs are the
-# single source of truth — this file is never committed into a model dir; it
-# is injected at runtime from the mounted real model-repository.
-#
-# See openspec/changes/2026-06-10-real-triton-test-stack.
-# -------------------------------------------------------------------
+# Identity stub injected by entrypoint.py into every leaf model's 1/model.py.
+# Reads its own model_config and returns correctly-typed, correctly-shaped zeros
+# for each declared output, so a real tritonserver honours the config.pbtxt wire
+# contract in dev/CI without weights. Validates protocol + shape, not numerics.
 
 import json
 

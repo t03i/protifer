@@ -2,26 +2,18 @@
 """
 Container entrypoint for the dev/CI stub Triton.
 
-Derives a python-backed stub model-repository FROM the real `model-repository/`
-(mounted read-only) at boot, then execs `tritonserver` against it. Nothing is
-committed as a copy — the real configs are the single source of truth, and this
-transform runs every time the container starts:
+At boot, derives a python-backed stub model-repository from the real one (mounted
+read-only at STUB_SRC_REPO, default /src) into STUB_MODEL_REPO (default /models),
+then execs `tritonserver`. Per source model:
 
-  ensemble (platform: "ensemble")  -> config.pbtxt copied as-is (the external
-                                      gRPC wire contract; identical to prod)
-  leaf (backend: onnxruntime|python)
-                                   -> backend rewritten to "python", the conda
-                                      EXECUTION_ENV_PATH parameters block (+ its
-                                      introducing comment) and default_model_filename
-                                      stripped; identity_model.py dropped into 1/model.py
-  _deferred/*                      -> skipped (not in the active dev inventory)
+  ensemble (platform: "ensemble")  -> config.pbtxt copied as-is (the gRPC contract)
+  leaf (backend: onnxruntime|python) -> backend rewritten to "python";
+                                      EXECUTION_ENV_PATH parameters block and
+                                      default_model_filename stripped;
+                                      identity_model.py dropped into 1/model.py
+  _deferred/*                      -> skipped
 
-So the stub serves the real ensemble contract via a python-only Triton with no
-weights and no onnx/conda. Env: STUB_SRC_REPO (default /src, the mounted real
-repo), STUB_MODEL_REPO (default /models, the derived repo). Extra args after the
-script are forwarded to tritonserver.
-
-See openspec/changes/2026-06-10-real-triton-test-stack.
+Extra args after the script are forwarded to tritonserver.
 """
 import os
 import re
