@@ -21,15 +21,24 @@ contract is read live from `../model-repository` at every boot, so:
   regenerate and no freshness gate.
 - **Only a production Triton version bump touches the image.** Its base tag is
   pinned equal to the prod Triton tag (`-py3-min`), which is the whole point —
-  the proto/shape contract stays in lockstep with prod. When prod Triton bumps:
-  1. Bump the `triton_version` input (and the `:25.06` tags in
-     `docker-compose.{dev,test}.yml` + `.github/workflows/ci.yml`) to match.
-  2. Re-run the **Triton stub image** workflow
-     (`.github/workflows/triton-stub.yml`, manual `workflow_dispatch`) to
-     recompose and push the new tag to GHCR.
+  the proto/shape contract stays in lockstep with prod. When prod Triton bumps,
+  edit the `:<tag>` in `docker-compose.{dev,test}.yml` to match — that's it.
+  CI's `triton-stub-image` job (`.github/workflows/ci.yml`) reads the tag from
+  the test compose and, if GHCR doesn't already have it, composes and pushes it
+  on the PR via `infra/triton-stub/build.sh` — so the bump is self-contained and
+  goes green without a manual step. Normal runs are a sub-second manifest check.
 
-The deploy repos' RUNBOOKs reference this ritual; the workflow and the contract
-both live here.
+  To overwrite an existing tag (e.g. the upstream base image moved under the same
+  tag) or pre-seed out of band, run the manual **Triton stub image** workflow
+  (`.github/workflows/triton-stub.yml`, `workflow_dispatch`) or `build.sh` by hand:
+
+  ```bash
+  echo "$GHCR_TOKEN" | docker login ghcr.io -u t03i --password-stdin
+  VERSION=25.06 PUSH=1 infra/triton-stub/build.sh
+  ```
+
+The deploy repos' RUNBOOKs reference this ritual; the script, workflows, and the
+contract all live here.
 
 ## Applying dev seeds
 

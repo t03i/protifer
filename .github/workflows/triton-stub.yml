@@ -1,5 +1,9 @@
 name: Triton stub image
 
+# Manual force-rebuild of ghcr.io/t03i/protifer-triton-stub:<tag>. CI's
+# `triton-stub-image` job already builds the tag on-demand when it's missing;
+# use this when you need to overwrite an existing tag (e.g. the upstream base
+# image moved under the same tag) or pre-seed a new version out of band.
 on:
   workflow_dispatch:
     inputs:
@@ -16,9 +20,6 @@ jobs:
   build-push:
     name: Compose & push stub image
     runs-on: ubuntu-latest
-    env:
-      TRITON_VERSION: ${{ inputs.triton_version }}
-      IMAGE: ghcr.io/t03i/protifer-triton-stub
     steps:
       - uses: actions/checkout@v6
 
@@ -26,10 +27,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - uses: docker/setup-buildx-action@v4
-
-      # compose.py pulls both the full (~11 GB) and min (~6 GB) images to extract
-      # the python backend; reclaim runner space first.
+      # compose.py pulls the full (~11 GB) and min (~6 GB) images; reclaim first.
       - name: Reclaim runner disk
         uses: jlumbroso/free-disk-space@main
         with:
@@ -42,19 +40,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compose slim Triton (py3-min + python backend)
-        run: |
-          set -euo pipefail
-          git clone --depth 1 --branch "r${TRITON_VERSION}" \
-            https://github.com/triton-inference-server/server.git triton-server
-          cd triton-server
-          python3 compose.py \
-            --backend python \
-            --image full,nvcr.io/nvidia/tritonserver:${TRITON_VERSION}-py3 \
-            --image min,nvcr.io/nvidia/tritonserver:${TRITON_VERSION}-py3-min \
-            --output-name "${IMAGE}:${TRITON_VERSION}"
-          echo "Composed image size:"
-          docker image ls "${IMAGE}"
-
-      - name: Push
-        run: docker push "${IMAGE}:${TRITON_VERSION}"
+      - name: Compose & push
+        env:
+          VERSION: ${{ inputs.triton_version }}
+          IMAGE: ghcr.io/t03i/protifer-triton-stub
+          PUSH: '1'
+        run: ./infra/triton-stub/build.sh
