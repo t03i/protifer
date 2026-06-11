@@ -191,16 +191,11 @@ function deriveSeqLen(request: ModelInferRequest): number {
     return Math.max(1, seq.length)
   }
 
-  // bind_embed: transposed input [1024, seqLen] — shape[1] is seqLen
+  // bind_embed: transposed input [..., 1024, seqLen] — seqLen is the last dim
   if (request.model_name === 'bind_embed') {
-    const shape = inputs[0]?.shape
-    if (
-      shape &&
-      shape.length >= 2 &&
-      typeof shape[1] === 'number' &&
-      shape[1] > 0
-    ) {
-      return shape[1]
+    const last = inputs[0]?.shape.at(-1)
+    if (typeof last === 'number' && last > 0) {
+      return last
     }
     if (raw?.[0]) return Math.max(1, Math.floor(raw[0].length / (1024 * 4)))
   }

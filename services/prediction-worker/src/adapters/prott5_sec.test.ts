@@ -26,7 +26,7 @@ describe('prott5SecAdapter', () => {
       expect(req.model_name).toBe('prott5_sec')
       expect(req.inputs.at(0)?.name).toBe('input')
       expect(req.inputs.at(0)?.datatype).toBe('FP32')
-      expect(req.inputs.at(0)?.shape).toEqual([seqLen, 1024])
+      expect(req.inputs.at(0)?.shape).toEqual([1, seqLen, 1024])
       expect(req.outputs).toContainEqual({ name: 'd3_Yhat' })
       expect(req.outputs).toContainEqual({ name: 'd8_Yhat' })
       expect(req.raw_input_contents?.at(0)?.length).toBe(seqLen * 1024 * 4)

@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 
 import type { FooterLink } from '#/content/footer-links'
 import { footerSections } from '#/content/footer-links'
+import { VersionInfo } from '#/features/status/VersionInfo'
 
 function renderLink(link: FooterLink) {
   if (link.to) {
@@ -57,7 +58,10 @@ export function Footer() {
             © {year} Rostlab · Department of Bioinformatics, Technical
             University of Munich.
           </p>
-          <p>Research tool — not for diagnostic use.</p>
+          <div className="flex flex-col items-center gap-1 sm:flex-row sm:gap-4">
+            <p>Research tool — not for diagnostic use.</p>
+            <VersionInfo />
+          </div>
         </div>
       </div>
     </footer>

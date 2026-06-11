@@ -363,7 +363,7 @@ export function createApp(overrides?: {
     })
   })
 
-  app.route('/health', createHealthRouter())
+  app.route('/health', createHealthRouter({ sha: config.build.gitSha }))
   app.route(
     '/health/triton',
     createHealthTritonRouter({ triton: () => tritonClient.serverReady() }),

@@ -28,11 +28,11 @@ describe('Service health verification', () => {
     redis.disconnect()
   })
 
-  it('Mock-triton HTTP health is reachable', async () => {
-    const res = await fetch('http://localhost:18002/health')
+  it('Triton stub HTTP health is reachable', async () => {
+    // Real tritonserver exposes /v2/health/ready (KServe), not the old
+    // mock-triton's /health; the test stack maps HTTP to host :18000.
+    const res = await fetch('http://localhost:18000/v2/health/ready')
     expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body).toEqual({ status: 'ok' })
   })
 
   it('Garage S3 is reachable', async () => {

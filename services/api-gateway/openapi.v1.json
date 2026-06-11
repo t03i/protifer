@@ -316,9 +316,12 @@
                     },
                     "timestamp": {
                       "type": "string"
+                    },
+                    "sha": {
+                      "type": "string"
                     }
                   },
-                  "required": ["status", "timestamp"]
+                  "required": ["status", "timestamp", "sha"]
                 }
               }
             }

@@ -49,7 +49,7 @@ function makeSpecApp() {
   }
 
   const app = new OpenAPIHono<{ Variables: Variables }>()
-  app.route('/health', createHealthRouter())
+  app.route('/health', createHealthRouter({ sha: 'dev' }))
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', {
     type: 'apiKey',

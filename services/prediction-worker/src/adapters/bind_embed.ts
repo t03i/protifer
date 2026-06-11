@@ -30,7 +30,7 @@ export const bindEmbedAdapter: ModelAdapter<'bindembed'> = {
     return {
       model_name: 'bind_embed',
       inputs: [
-        { name: 'ensemble_input', datatype: 'FP32', shape: [1024, seqLen] },
+        { name: 'ensemble_input', datatype: 'FP32', shape: [1, 1024, seqLen] },
       ],
       outputs: [
         { name: 'output_0' },

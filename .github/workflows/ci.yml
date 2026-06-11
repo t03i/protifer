@@ -94,12 +94,101 @@ jobs:
       - name: Build ${{ matrix.image.name }}
         run: docker build -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
 
-  backend-e2e:
-    name: Backend E2E
+  triton-stub-image:
+    name: Ensure triton-stub image
+    # backend-e2e pulls the ~0.8 GB slim triton-stub image from GHCR. It is a slow-moving
+    # artifact (changes only on a Triton version bump — entrypoint/identity are
+    # mounted, not baked), so build+push it ONLY when the tag is missing; normal
+    # runs are a sub-second manifest check. This keeps a Triton bump self-contained:
+    # bump the tag in docker-compose.*.yml and the first PR run materialises it.
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Resolve stub version from compose
+        id: resolve
+        run: |
+          version=$(grep -oE 'protifer-triton-stub:[0-9.]+' infra/docker-compose.test.yml | head -1 | cut -d: -f2)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check whether the tag already exists
+        id: check
+        env:
+          REF: ghcr.io/t03i/protifer-triton-stub:${{ steps.resolve.outputs.version }}
+        run: |
+          if docker manifest inspect "$REF" >/dev/null 2>&1; then
+            echo "$REF already in GHCR — skipping build"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$REF missing — will build"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # compose.py pulls the full (~11 GB) and min (~6 GB) images; reclaim first.
+      - name: Reclaim runner disk
+        if: steps.check.outputs.exists == 'false'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+
+      - name: Set up Python
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Compose & push stub image
+        if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+          IMAGE: ghcr.io/t03i/protifer-triton-stub
+          PUSH: '1'
+        run: ./infra/triton-stub/build.sh
+
+  backend-e2e:
+    name: Backend E2E
+    runs-on: ubuntu-latest
+    # The image is guaranteed present by triton-stub-image; here we only pull it.
+    needs: triton-stub-image
+    # GHCR pull of the ~0.8 GB slim triton-stub image needs packages:read + a docker login.
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # Disk strategy (openspec change Decision 4). The slim triton-stub image is now
+      # ~0.8 GB so default runner disk would suffice; pointing Docker's data-root at
+      # the larger /mnt ephemeral volume (~65 GB) is kept as cheap headroom for the
+      # full stack. Fallback if this fights the runner: jlumbroso/free-disk-space@main.
+      - name: Relocate Docker data-root to /mnt
+        run: |
+          sudo systemctl stop docker docker.socket
+          sudo mkdir -p /mnt/docker
+          echo '{"data-root":"/mnt/docker"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl start docker
+          echo "Docker root: $(docker info -f '{{.DockerRootDir}}')"
+          df -h / /mnt
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: oven-sh/setup-bun@v2 # bun version from package.json packageManager
 
@@ -107,7 +196,15 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Start test stack
-        run: docker compose -f infra/docker-compose.test.yml -p protifer-test up -d --build --wait --wait-timeout 120
+        # Generous timeout: first run pulls the ~0.8 GB slim image and a real
+        # tritonserver derives + loads the stub model set before reporting ready.
+        run: docker compose -f infra/docker-compose.test.yml -p protifer-test up -d --build --wait --wait-timeout 300
+
+      - name: Measure peak disk
+        if: always()
+        run: |
+          df -h / /mnt
+          docker system df
 
       - name: Run backend E2E tests
         run: bun run --filter @protifer/backend-e2e test
