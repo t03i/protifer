@@ -15,6 +15,9 @@ COPY --from=installer --chown=bun:bun /app .
 COPY --from=pruner --chown=bun:bun /app/out/full/ .
 WORKDIR /app/services/api-gateway
 
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
+
 # Drop privileges. `oven/bun:*-alpine` ships with a non-root `bun` user
 # (uid 1000) — use it. PORT is a non-privileged port (default 3001).
 USER bun

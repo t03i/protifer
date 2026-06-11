@@ -23,6 +23,7 @@ const healthRoute = createRoute({
           schema: z.object({
             status: z.literal('ok'),
             timestamp: z.string(),
+            sha: z.string(),
           }),
         },
       },
@@ -31,10 +32,14 @@ const healthRoute = createRoute({
   },
 })
 
-export function createHealthRouter() {
+export function createHealthRouter(options: { sha: string }) {
   const router = new OpenAPIHono()
   router.openapi(healthRoute, (c) =>
-    c.json({ status: 'ok' as const, timestamp: new Date().toISOString() }),
+    c.json({
+      status: 'ok' as const,
+      timestamp: new Date().toISOString(),
+      sha: options.sha,
+    }),
   )
   return router
 }

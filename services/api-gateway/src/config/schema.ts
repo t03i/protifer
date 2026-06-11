@@ -34,6 +34,16 @@ const env = {
   }),
 }
 
+const build = {
+  gitSha: configField({
+    envName: 'GIT_SHA',
+    description:
+      'Git commit SHA this image was built from (injected as a Docker build-arg). "dev" outside CI builds. Surfaced on /health so the frontend can detect frontend/backend version skew.',
+    type: z.string().min(1),
+    default: 'dev',
+  }),
+}
+
 const auth = {
   betterAuthSecret: secretField({
     envName: 'BETTER_AUTH_SECRET',
@@ -283,6 +293,7 @@ const sheddingSection = customSection({
 
 export const ConfigSchema = defineConfig({
   env,
+  build,
   auth,
   database,
   cors,
