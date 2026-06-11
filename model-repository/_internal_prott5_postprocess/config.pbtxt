@@ -26,7 +26,7 @@ output [
 instance_group [ { count: 1, kind: KIND_AUTO } ]
 
 # Shared CPU conda-pack env, sibling envs/ tree resolved relative to the model
-# repository so the mount path can differ dev vs prod (Decision 8).
+# repository so the mount path can differ dev vs prod.
 parameters: {
   key: "EXECUTION_ENV_PATH"
   value: { string_value: "$$TRITON_MODEL_DIRECTORY/../../envs/cpu_py312.tar.gz" }
