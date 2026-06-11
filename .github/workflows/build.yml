@@ -63,6 +63,10 @@ jobs:
           file: ${{ matrix.service.dockerfile }}
           push: true
           tags: ghcr.io/t03i/${{ matrix.service.image }}:${{ github.sha }}
+          # Bakes the commit SHA into each image so the gateway can self-report
+          # it on /health (Dockerfiles that don't declare ARG GIT_SHA ignore it).
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.service.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service.image }}
           provenance: false
