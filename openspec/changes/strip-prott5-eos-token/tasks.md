@@ -21,6 +21,6 @@
 ## 5. Tests & verification
 
 - [x] 5.1 Add `infra/triton/tests/test_prott5_postprocess.py` (mirroring `test_tmbed_viterbi.py`) covering `strip_eos`: batch=1 drops trailing row; batch=2 with differing lengths drops each EOS and re-pads with zeros
-- [ ] 5.2 Boot real Triton against the model repository; confirm `_internal_prott5_postprocess` and `prot_t5_pipeline` both report READY
-- [ ] 5.3 Backend E2E: embed a known `L`-residue sequence → stored embedding byte length `== L * 1024 * 2`; run a prediction → per-residue outputs have exactly `L` positions
-- [ ] 5.4 Run repo quality gates: `bun run typecheck`, `bun run lint`, `bun run format`, `bun run test`
+- [x] 5.2 Boot real Triton against the model repository; confirm `_internal_prott5_postprocess` and `prot_t5_pipeline` both report READY
+- [x] 5.3 Backend E2E: embed a known `L`-residue sequence → stored embedding byte length `== L * 1024 * 2`; run a prediction → per-residue outputs have exactly `L` positions
+- [x] 5.4 Run repo quality gates: `bun run typecheck`, `bun run lint`, `bun run format`, `bun run test`

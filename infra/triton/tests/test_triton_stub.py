@@ -118,7 +118,7 @@ class TestBuildRepoAgainstRealRepo:
             ROOT / "model-repository", tmp_path / "models", STUB_DIR / "identity_model.py"
         )
         assert set(ensembles) == {"prot_t5_pipeline", "tmbed", "bind_embed"}
-        assert len(leaves) == 19
+        assert len(leaves) == 20
         # ensembles verbatim, no model.py; leaves transformed, model.py injected
         ens = tmp_path / "models" / "prot_t5_pipeline"
         assert (
@@ -214,6 +214,30 @@ class TestIdentityModel:
         arr = resp.output_tensors[0].as_numpy()
         assert arr.shape == (3, 1)
         assert arr.dtype == object
+
+    def test_fixed_feature_dim_does_not_drive_dynamic_length(self):
+        # postprocess leaf: last_hidden_state [-1,1024] + attention_mask [-1] ->
+        # embeddings [-1,1024]. The -1 must track the seq axis, not the 1024 feature dim.
+        config = {
+            "max_batch_size": 8,
+            "input": [
+                {"name": "last_hidden_state", "data_type": "TYPE_FP16", "dims": ["-1", "1024"]},
+                {"name": "attention_mask", "data_type": "TYPE_INT64", "dims": ["-1"]},
+            ],
+            "output": [
+                {"name": "embeddings", "data_type": "TYPE_FP16", "dims": ["-1", "1024"]}
+            ],
+        }
+        m = self._model(config)
+        req = {
+            "last_hidden_state": _StubTensor(
+                "last_hidden_state", np.zeros((1, 10, 1024), dtype=np.float16)
+            ),
+            "attention_mask": _StubTensor("attention_mask", np.zeros((1, 10), dtype=np.int64)),
+        }
+        [resp] = m.execute([req])
+        arr = resp.output_tensors[0].as_numpy()
+        assert arr.shape == (1, 10, 1024)  # seq len 10, not the 1024 feature dim
 
     def test_string_input_drives_dynamic_length(self):
         # tokenizer: sequences STRING [-1] -> input_ids INT64 [-1] sized by content
