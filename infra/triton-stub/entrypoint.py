@@ -104,9 +104,14 @@ def build_repo(src, dst, identity_model):
     """Derive the stub repo at `dst` from the real repo at `src`. Returns
     (ensembles, leaves) for logging."""
     src, dst, identity_model = Path(src), Path(dst), Path(identity_model)
-    if dst.exists():
-        shutil.rmtree(dst)
-    dst.mkdir(parents=True)
+    # Clear dst's *contents*, not dst itself: in the container it's a tmpfs
+    # mountpoint, and rmdir'ing a mountpoint fails with EBUSY.
+    dst.mkdir(parents=True, exist_ok=True)
+    for entry in dst.iterdir():
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
 
     ensembles, leaves = [], []
     for entry in sorted(src.iterdir()):
