@@ -53,7 +53,8 @@ python3 compose.py \
 # everything removed here is dlopen'd solely by GPU backends, which are gone. The
 # first find clears CUDA toolkit extras (Nsight, compat, nvvm, ...) keeping `targets`,
 # the second keeps only libcudart within it.
-docker run --name "${strip_ctr}" --entrypoint sh "${fat_tag}" -euc '
+# -e but not -u: the base image sets BASH_ENV, whose rc trips nounset on $PS1.
+docker run --name "${strip_ctr}" --entrypoint sh "${fat_tag}" -ec '
   find /usr/local/cuda-* -mindepth 1 -maxdepth 1 ! -name targets -exec rm -rf {} + ;
   find /usr/local/cuda-*/targets/*/lib -type f ! -name "libcudart.so*" -delete ;
   rm -rf /lib/x86_64-linux-gnu/libnvinfer* \
