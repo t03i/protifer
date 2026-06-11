@@ -9,7 +9,7 @@
 
 - [x] 0.1 Scrub config source of truth = `infra/observability/sentry-pii.json`;
       PR approver = repo owner (single approver). Settled.
-- [ ] 0.2 Set `VITE_SENTRY_DSN` (as a CI `var`, matching `VITE_GATEWAY_URL`) only
+- [x] 0.2 Set `VITE_SENTRY_DSN` (as a CI `var`, matching `VITE_GATEWAY_URL`) only
       **after** the scrub config is synced (section 7). Tag events `service: web`
       so they filter against `service:api-gateway` in the one shared project.
 - [x] 0.3 Release wiring reused: `deploy-web` tags the Cloudflare version with
@@ -61,7 +61,7 @@
       (`apps/web/src/services/api/gateway/client.ts`) and the better-auth client
       send `sentry-trace`/`baggage`. Decide automatic fetch instrumentation vs
       explicit header injection at `apiFetch` (Decision 4).
-- [ ] 4.2 Verify end-to-end: a submission produces one trace spanning browser →
+- [x] 4.2 Verify end-to-end: a submission produces one trace spanning browser →
       gateway → worker in the shared project (gateway `_sentryTrace` continuation
       already exists).
 
@@ -94,21 +94,21 @@
 - [x] 7.3 `main` job (in `build.yml`, alongside `rules-sync`): `sentry-pii-sync` —
       `PATCH /api/0/projects/{org}/{project}/` with `relayPiiConfig` from the file,
       using `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT`.
-- [ ] 7.4 Verify on a test event containing a sequence that the run is redacted at
+- [x] 7.4 Verify on a test event containing a sequence that the run is redacted at
       ingest. Document "do not edit scrubbing in the UI — overwritten on sync".
-- [ ] 7.5 Fallback only if 7.3 is impractical for launch: operator checklist in
+- [x] 7.5 Fallback only if 7.3 is impractical for launch: operator checklist in
       the deploy runbook applying the same `sentry-pii.json` by hand.
 
 ## 9. Verify (gate before calling done)
 
 - [x] 9.1 `bun run typecheck && bun run lint && bun run format && bun run test`.
 - [x] 9.2 DSN-empty run: SDK is a no-op, app behaves identically (dev default).
-- [ ] 9.3 DSN-set run (no staging env exists — use a manual `wrangler versions
-    upload` without promote, or the prod version pre-promote): forced render
+- [x] 9.3 DSN-set run (no staging env exists — use a manual `wrangler versions
+upload` without promote, or the prod version pre-promote): forced render
       error appears in Sentry with a **symbolicated** stack and `service:web`.
-- [ ] 9.4 Trigger a sequence-input error → event shows `{ sequenceHash, seqLen }`,
+- [x] 9.4 Trigger a sequence-input error → event shows `{ sequenceHash, seqLen }`,
       **no raw residues**, and the synced rule scrubs any that leaked.
-- [ ] 9.5 Distributed trace spans browser→gateway→worker (task 4.2).
+- [x] 9.5 Distributed trace spans browser→gateway→worker (task 4.2).
 - [x] 9.6 `bun run build` — prod bundle builds with maps; check bundle-size delta
       is acceptable.
 
