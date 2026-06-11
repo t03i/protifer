@@ -39,6 +39,31 @@ describe('ServiceStatusDot', () => {
     expect(dot.className).toContain('bg-gray-400')
     expect(dot.className).not.toContain('bg-green-500')
   })
+
+  it('links to the status page when URL is set', () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.example.com')
+    vi.mocked(useServiceStatus).mockReturnValue({ kind: 'operational' })
+    render(<ServiceStatusDot />)
+    const link = screen.getByRole('link')
+    expect(link).toHaveAttribute('href', 'https://status.example.com')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(
+      screen.getByLabelText('Service status: operational'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not link when no URL is set', () => {
+    vi.mocked(useServiceStatus).mockReturnValue({ kind: 'operational' })
+    render(<ServiceStatusDot />)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('does not link when connection-lost even if URL is set', () => {
+    vi.stubEnv('VITE_STATUS_PAGE_URL', 'https://status.example.com')
+    vi.mocked(useServiceStatus).mockReturnValue({ kind: 'connection-lost' })
+    render(<ServiceStatusDot />)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
 })
 
 describe('ServiceStatusBanner', () => {

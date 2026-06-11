@@ -39,16 +39,41 @@ const STATUS_CONFIG: Record<
   },
 }
 
+/**
+ * The Better Stack status page is linkable except when the connection is lost —
+ * a local-only signal where the page may be unreachable too.
+ */
+function useStatusPageLink(kind: ServiceKind) {
+  const url = import.meta.env['VITE_STATUS_PAGE_URL'] as string | undefined
+  return { url, canLink: Boolean(url) && kind !== 'connection-lost' }
+}
+
 /** Small dot indicator placed in the header nav bar. */
 export function ServiceStatusDot() {
   const { kind } = useServiceStatus()
   const cfg = STATUS_CONFIG[kind]
-  return (
+  const { url, canLink } = useStatusPageLink(kind)
+
+  const dot = (
     <span
       aria-label={`Service status: ${kind}`}
       title={kind}
       className={cn('inline-block size-2 rounded-full', cfg.dot)}
     />
+  )
+
+  if (!canLink) return dot
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`View status page — ${kind}`}
+      className="inline-flex items-center hover:opacity-90"
+    >
+      {dot}
+    </a>
   )
 }
 
@@ -57,13 +82,9 @@ export function ServiceStatusBanner() {
   const { kind } = useServiceStatus()
   const cfg = STATUS_CONFIG[kind]
 
+  const { url: statusPageUrl, canLink } = useStatusPageLink(kind)
+
   if (!cfg.banner || !cfg.text) return null
-
-  const statusPageUrl = import.meta.env['VITE_STATUS_PAGE_URL'] as
-    | string
-    | undefined
-
-  const canLink = Boolean(statusPageUrl) && kind !== 'connection-lost'
 
   const inner = (
     <p className="text-sm font-medium">
