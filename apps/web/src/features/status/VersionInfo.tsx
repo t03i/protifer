@@ -10,11 +10,6 @@ const SKEW_CLASS: Record<VersionSkew, string> = {
   unknown: 'text-muted-foreground',
 }
 
-/**
- * Quiet diagnostics line for the footer: shows the frontend and backend build
- * SHAs side by side, coloured by whether they match. Copy-pasteable into bug
- * reports. Transient skew during a rollout is expected — never an error state.
- */
 export function VersionInfo() {
   const fe = frontendSha()
   const { data: be } = useGatewayVersion()

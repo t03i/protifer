@@ -15,9 +15,6 @@ COPY --from=installer --chown=bun:bun /app .
 COPY --from=pruner --chown=bun:bun /app/out/full/ .
 WORKDIR /app/services/api-gateway
 
-# Build SHA, injected by CI (build.yml) as --build-arg GIT_SHA=<github.sha>.
-# Surfaced on /health so the frontend can detect frontend/backend version skew.
-# Defaults to "dev" for local builds that don't pass the arg.
 ARG GIT_SHA=dev
 ENV GIT_SHA=$GIT_SHA
 
