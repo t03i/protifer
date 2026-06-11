@@ -3,6 +3,7 @@ Test strip_eos from model-repository/_internal_prott5_postprocess/1/model.py
 directly (without Triton runtime). Validates that the ProtT5 EOS token row is
 dropped per sequence and surviving residues are preserved as a zero-padded prefix.
 """
+import importlib.util
 import sys
 import types
 from pathlib import Path
@@ -44,10 +45,15 @@ def _find_model_dir() -> Path:
     raise RuntimeError('could not locate _internal_prott5_postprocess/1/model.py')
 
 
+# Load under a unique module name (not bare `model`) so sibling test modules that
+# `from model import ...` their own model.py don't collide via sys.modules.
 MODEL_DIR = _find_model_dir()
-sys.path.insert(0, str(MODEL_DIR))
-
-from model import TritonPythonModel, strip_eos  # noqa: E402
+_spec = importlib.util.spec_from_file_location(
+    "prott5_postprocess_model", MODEL_DIR / "model.py"
+)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+TritonPythonModel, strip_eos = _mod.TritonPythonModel, _mod.strip_eos
 
 H = 1024
 
