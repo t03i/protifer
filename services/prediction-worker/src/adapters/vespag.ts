@@ -15,7 +15,7 @@ export const vespagAdapter: ModelAdapter<'variation'> = {
     )
     return {
       model_name: 'vespag',
-      inputs: [{ name: 'input', datatype: 'FP32', shape: [seqLen, 1024] }],
+      inputs: [{ name: 'input', datatype: 'FP32', shape: [1, seqLen, 1024] }],
       outputs: [{ name: 'output' }],
       raw_input_contents: [buf],
     }

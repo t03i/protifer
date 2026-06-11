@@ -61,7 +61,7 @@ describe('bindEmbedAdapter', () => {
       const input0 = req.inputs.at(0)
       expect(input0?.name).toBe('ensemble_input')
       expect(input0?.datatype).toBe('FP32')
-      expect(input0?.shape).toEqual([1024, seqLen])
+      expect(input0?.shape).toEqual([1, 1024, seqLen])
 
       // Verify transpose: transposed[c * seqLen + r] === r
       const buf = req.raw_input_contents?.at(0)

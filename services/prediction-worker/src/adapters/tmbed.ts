@@ -25,8 +25,8 @@ export const tmbedAdapter: ModelAdapter<'tmbed'> = {
     return {
       model_name: 'tmbed',
       inputs: [
-        { name: 'ensemble_input', datatype: 'FP32', shape: [seqLen, 1024] },
-        { name: 'mask', datatype: 'FP32', shape: [seqLen] },
+        { name: 'ensemble_input', datatype: 'FP32', shape: [1, seqLen, 1024] },
+        { name: 'mask', datatype: 'FP32', shape: [1, seqLen] },
       ],
       outputs: [{ name: 'labels' }, { name: 'probabilities' }],
       raw_input_contents: [embBuf, maskBuf],
