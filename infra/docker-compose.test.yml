@@ -12,7 +12,7 @@ x-worker-env: &worker-env
   REDIS_HOST: redis
   REDIS_PORT: '6379'
   REDIS_PASSWORD: 'test-redispw'
-  TRITON_URL: 'mock-triton:8001'
+  TRITON_URL: 'triton-stub:8001'
   GARAGE_ENDPOINT: 'http://garage:3900'
   GARAGE_REGION: garage
   GARAGE_ACCESS_KEY_ID: 'GK000000000000000000000000'
@@ -66,21 +66,34 @@ services:
     restart: 'no'
     logging: *default-logging
 
-  mock-triton:
-    build:
-      context: ..
-      dockerfile: infra/mock-triton/Dockerfile
+  # Real tritonserver (py3-min + python backend) serving python-identity stubs;
+  # repo derived at boot from the real ../model-repository (read-only). Same image
+  # and mounts as the dev stack — keep these two service blocks in lockstep.
+  triton-stub:
+    image: ghcr.io/t03i/protifer-triton-stub:25.06
+    command: ['python3', '/opt/triton-stub/entrypoint.py']
     environment:
-      PORT: '8001'
-      HTTP_PORT: '8002'
+      STUB_SRC_REPO: /src
+      STUB_MODEL_REPO: /models
     ports:
-      - '18001:8001'
-      - '18002:8002'
+      - '18000:8000' # HTTP / health
+      - '18001:8001' # gRPC (TRITON_URL)
+    volumes:
+      - ../model-repository:/src:ro
+      - ./triton-stub/entrypoint.py:/opt/triton-stub/entrypoint.py:ro
+      - ./triton-stub/identity_model.py:/opt/triton-stub/identity_model.py:ro
+    tmpfs:
+      - /models
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:8002/health']
-      interval: 10s
-      timeout: 3s
+      test:
+        [
+          'CMD-SHELL',
+          'python3 -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/v2/health/ready'')"',
+        ]
+      interval: 15s
+      timeout: 5s
       retries: 5
+      start_period: 150s
     logging: *default-logging
 
   postgres:
@@ -138,7 +151,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      mock-triton:
+      triton-stub:
         condition: service_healthy
       garage-init:
         condition: service_completed_successfully
@@ -161,7 +174,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      mock-triton:
+      triton-stub:
         condition: service_healthy
       garage-init:
         condition: service_completed_successfully
@@ -177,7 +190,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      mock-triton:
+      triton-stub:
         condition: service_healthy
       garage-init:
         condition: service_completed_successfully

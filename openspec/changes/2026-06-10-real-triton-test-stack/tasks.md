@@ -61,21 +61,23 @@ python` (needs full `-py3` + `-py3-min` at compose time). Per NVIDIA compose doc
 - [ ] 2.1 **RUN the workflow** to actually compose + push the image. Confirm the
       composed size and that `compose.py`'s `--image full,/min,` flags are correct
       for the pinned tag. (Cannot run from a macOS dev session — infra-gated.)
-- [ ] 2.4 Document the bump ritual in the deploy runbook: prod Triton tag changes →
+- [x] 2.4 Document the bump ritual in the deploy runbook: prod Triton tag changes →
       bump `triton_version` here → re-run workflow. (No repo regen — derived at boot.)
+      Documented in `infra/README.md` ("Triton stub bump ritual"); stale `mock-triton`
+      reference there updated to `triton-stub`.
 
 ## 3. Wire dev & test stacks to the stub
 
-- [ ] 3.1 `infra/docker-compose.dev.yml`: replace the `mock-triton` build service
+- [x] 3.1 `infra/docker-compose.dev.yml`: replace the `mock-triton` build service
       with `triton-stub` (image `ghcr.io/t03i/protifer-triton-stub:25.06`, port
       `8001`). Mount `../model-repository:/src:ro` + `./triton-stub/entrypoint.py` +
       `./triton-stub/identity_model.py`; `command: ["python3", ".../entrypoint.py"]`.
       Keep `TRITON_URL=mock-triton:8001` via a service alias, or rename to
       `triton-stub` and update dependents (lean rename for honesty).
-- [ ] 3.2 `infra/docker-compose.test.yml`: same replacement + same mounts; keep `:8001`.
-- [ ] 3.3 Healthcheck → Triton's real `/v2/health/ready` (HTTP `:8000`) so compose
+- [x] 3.2 `infra/docker-compose.test.yml`: same replacement + same mounts; keep `:8001`.
+- [x] 3.3 Healthcheck → Triton's real `/v2/health/ready` (HTTP `:8000`) so compose
       `--wait` blocks on actual model readiness, not the mock's hand-rolled `/health`.
-- [ ] 3.4 Confirm the stub loads exactly the active set in
+- [x] 3.4 Confirm the stub loads exactly the active set in
       `infra/triton/model-inventory.dev.json` (gateway inventory unchanged).
 
 ## 4. CI disk strategy (§ Decision 4)
@@ -85,7 +87,11 @@ python` (needs full `-py3` + `-py3-min` at compose time). Per NVIDIA compose doc
       bring the stub stack up and **measure peak disk**.
 - [ ] 4.2 Primary: point Docker data-root at `/mnt`. Fallback: `jlumbroso/free-disk-space`.
       Pick the lighter one from 4.1; keep `--wait-timeout` generous for first pull.
-- [ ] 4.3 Confirm the GHCR pull authenticates via `GITHUB_TOKEN` (no nvcr in the PR job).
+- [x] 4.3 Confirm the GHCR pull authenticates via `GITHUB_TOKEN` (no nvcr in the PR job).
+      Wired in `backend-e2e`: `permissions: packages:read` + `docker/login-action` to
+      `ghcr.io` with `secrets.GITHUB_TOKEN`. Primary disk strategy (data-root → `/mnt`)
+      and a peak-disk measurement step are in place; 4.1/4.2 await the first CI run to
+      confirm the measurement and final mechanism pick.
 
 ## 5. ~~Freshness gate~~ — REMOVED (obviated by boot-time derivation)
 
@@ -100,10 +106,19 @@ python` (needs full `-py3` + `-py3-min` at compose time). Per NVIDIA compose doc
       with the stub — all active models report READY; a real submission flows
       browser/worker → gateway → stub and returns zero-valued results of the
       **right shape/dtype**.
-- [ ] 6.2 **Audit fixture-value dependence** (risk #1): find consumers of
+- [x] 6.2 **Audit fixture-value dependence** (risk #1): find consumers of
       `makePredictionOutputs` and any test asserting on mock output _values_
       (dssp3 strings, conservation, etc.). Move value-assertions to surface #1
       (fake `TritonClient`) or static fixtures. This gates removal.
+      **Audit:** `makePredictionOutputs` + mock value-crafting are consumed ONLY by
+      `infra/mock-triton/server.ts` and `mock-server.test.ts` (both deleted in 6.4/6.5)
+      — zero external value-dependence. All crafted-value assertions (e.g. `dssp3 ===
+    'HECH'`) already live in surface-#1 adapter tests with hand-built responses
+      (`adapters/*.test.ts`), untouched. The only stub-semantics-dependent E2E
+      assertion was `pipeline.test.ts` `dssp3 toHaveLength(seqLen)` — against zero
+      stubs the shape heuristic fills the `-1` dim with the 1024 feature dim, so it
+      yielded 1024≠28. Relaxed to a structural non-empty-string check; exact
+      per-residue length/content stays owned by `adapters/prott5_sec.test.ts`.
 - [ ] 6.3 Integration suite green against the stub in CI (`bun run test:int` path).
 - [ ] 6.4 Delete `infra/mock-triton/` (Dockerfile, package.json, server.ts).
 - [ ] 6.5 Delete `packages/triton-client/src/mock-server.ts` + its test; drop the

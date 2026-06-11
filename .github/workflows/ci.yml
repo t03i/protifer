@@ -97,9 +97,33 @@ jobs:
   backend-e2e:
     name: Backend E2E
     runs-on: ubuntu-latest
+    # GHCR pull of the ~6 GB triton-stub image needs packages:read + a docker login.
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: actions/checkout@v6
+
+      # Disk strategy for the ~6 GB triton-stub image (openspec change Decision 4).
+      # Primary: point Docker's data-root at the larger /mnt ephemeral volume (~65 GB)
+      # so the image + the rest of the test stack fit, avoiding a per-run reclaim.
+      # Fallback if this fights the runner: jlumbroso/free-disk-space@main.
+      - name: Relocate Docker data-root to /mnt
+        run: |
+          sudo systemctl stop docker docker.socket
+          sudo mkdir -p /mnt/docker
+          echo '{"data-root":"/mnt/docker"}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl start docker
+          echo "Docker root: $(docker info -f '{{.DockerRootDir}}')"
+          df -h / /mnt
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: oven-sh/setup-bun@v2 # bun version from package.json packageManager
 
@@ -107,7 +131,15 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Start test stack
-        run: docker compose -f infra/docker-compose.test.yml -p protifer-test up -d --build --wait --wait-timeout 120
+        # Generous timeout: first run pulls ~6 GB and a real tritonserver loads
+        # the full active model set before reporting ready.
+        run: docker compose -f infra/docker-compose.test.yml -p protifer-test up -d --build --wait --wait-timeout 300
+
+      - name: Measure peak disk
+        if: always()
+        run: |
+          df -h / /mnt
+          docker system df
 
       - name: Run backend E2E tests
         run: bun run --filter @protifer/backend-e2e test
