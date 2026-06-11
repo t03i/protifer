@@ -30,7 +30,7 @@ describe('vespagAdapter', () => {
       expect(req.inputs).toHaveLength(1)
       expect(req.inputs.at(0)?.name).toBe('input')
       expect(req.inputs.at(0)?.datatype).toBe('FP32')
-      expect(req.inputs.at(0)?.shape).toEqual([seqLen, 1024])
+      expect(req.inputs.at(0)?.shape).toEqual([1, seqLen, 1024])
       expect(req.outputs).toEqual([{ name: 'output' }])
       expect(req.raw_input_contents).toHaveLength(1)
       expect(req.raw_input_contents?.at(0)).toBeInstanceOf(Buffer)

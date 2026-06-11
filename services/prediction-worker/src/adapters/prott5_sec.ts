@@ -20,7 +20,7 @@ export const prott5SecAdapter: ModelAdapter<'prott5_secondary_structure'> = {
     )
     return {
       model_name: 'prott5_sec',
-      inputs: [{ name: 'input', datatype: 'FP32', shape: [seqLen, 1024] }],
+      inputs: [{ name: 'input', datatype: 'FP32', shape: [1, seqLen, 1024] }],
       outputs: [{ name: 'd3_Yhat' }, { name: 'd8_Yhat' }],
       raw_input_contents: [buf],
     }

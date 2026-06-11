@@ -18,7 +18,7 @@ export const prott5ConsAdapter: ModelAdapter<'prott5_conservation'> = {
     )
     return {
       model_name: 'prott5_cons',
-      inputs: [{ name: 'input', datatype: 'FP32', shape: [seqLen, 1024] }],
+      inputs: [{ name: 'input', datatype: 'FP32', shape: [1, seqLen, 1024] }],
       outputs: [{ name: 'output' }],
       raw_input_contents: [buf],
     }

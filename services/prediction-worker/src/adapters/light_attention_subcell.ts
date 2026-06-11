@@ -33,8 +33,8 @@ export const lightAttentionSubcellAdapter: ModelAdapter<'light_attention_subcell
       return {
         model_name: 'light_attention_subcell',
         inputs: [
-          { name: 'input', datatype: 'FP32', shape: [seqLen, 1024] },
-          { name: 'mask', datatype: 'FP32', shape: [seqLen] },
+          { name: 'input', datatype: 'FP32', shape: [1, seqLen, 1024] },
+          { name: 'mask', datatype: 'FP32', shape: [1, seqLen] },
         ],
         outputs: [{ name: 'output' }],
         raw_input_contents: [embBuf, maskBuf],

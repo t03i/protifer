@@ -1,0 +1,48 @@
+name: Triton stub image
+
+# Manual force-rebuild of ghcr.io/t03i/protifer-triton-stub:<tag>. CI's
+# `triton-stub-image` job already builds the tag on-demand when it's missing;
+# use this when you need to overwrite an existing tag (e.g. the upstream base
+# image moved under the same tag) or pre-seed a new version out of band.
+on:
+  workflow_dispatch:
+    inputs:
+      triton_version:
+        description: 'Triton base version — MUST match the production Triton tag (e.g. 25.06)'
+        required: true
+        default: '25.06'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    name: Compose & push stub image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # compose.py pulls the full (~11 GB) and min (~6 GB) images; reclaim first.
+      - name: Reclaim runner disk
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose & push
+        env:
+          VERSION: ${{ inputs.triton_version }}
+          IMAGE: ghcr.io/t03i/protifer-triton-stub
+          PUSH: '1'
+        run: ./infra/triton-stub/build.sh
