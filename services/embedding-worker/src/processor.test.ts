@@ -209,6 +209,36 @@ describe('processEmbeddingJob', () => {
     ).rejects.toThrow(/invalid FP16 output length/)
   })
 
+  it('stores when the embedding row count equals the sequence length', async () => {
+    const sequence = 'MKTVRQERLK'
+    const store = makeInMemoryStore()
+    const fp16Buf = fp32ArrayToFp16Buffer(
+      new Array(sequence.length * 1024).fill(0.1) as number[],
+    )
+    const { client: triton } = makeTritonRaw(fp16Buf)
+
+    const result = await processEmbeddingJob(makeJob(sequence), {
+      store,
+      triton,
+    })
+
+    const stored = await store.get(result.embeddingRef)
+    expect(stored.length).toBe(sequence.length * 1024 * 2)
+  })
+
+  it('throws when the embedding has an extra (EOS) row beyond the sequence length', async () => {
+    const sequence = 'MKTVRQERLK'
+    const store = makeInMemoryStore()
+    const fp16Buf = fp32ArrayToFp16Buffer(
+      new Array((sequence.length + 1) * 1024).fill(0.1) as number[],
+    )
+    const { client: triton } = makeTritonRaw(fp16Buf)
+
+    await expect(
+      processEmbeddingJob(makeJob(sequence), { store, triton }),
+    ).rejects.toThrow(/row count .* != sequence length/)
+  })
+
   it('succeeds against a strict Triton mock that rejects non-numeric model_version', async () => {
     const sequence = 'MKTVRQERLK'
     const seqLen = sequence.length

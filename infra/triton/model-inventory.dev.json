@@ -50,6 +50,11 @@
       "role": "internal",
       "version": "dev"
     },
+    {
+      "triton": "_internal_prott5_postprocess",
+      "role": "internal",
+      "version": "dev"
+    },
     { "triton": "_tmbed_cv0", "role": "internal", "version": "dev" },
     { "triton": "_tmbed_cv1", "role": "internal", "version": "dev" },
     { "triton": "_tmbed_cv2", "role": "internal", "version": "dev" },

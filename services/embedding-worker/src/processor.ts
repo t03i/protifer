@@ -72,6 +72,15 @@ export async function processEmbeddingJob(
     )
   }
 
+  // Invariant: one embedding row per residue. A mismatch means a special token
+  // (EOS/leading) leaked through the pipeline — fail loud, never store.
+  const rows = fp16Buf.length / 2 / 1024
+  if (rows !== sequence.length) {
+    throw new Error(
+      `prot_t5_pipeline: embedding row count ${String(rows)} != sequence length ${String(sequence.length)}`,
+    )
+  }
+
   await store.put(embeddingRef, fp16Buf)
 
   const computedAt = new Date().toISOString()

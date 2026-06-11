@@ -43,7 +43,9 @@ class TritonPythonModel:
         """Pick a length to fill output -1 dims from the inputs, so per-residue
         outputs track the submitted sequence length where possible. Best-effort
         (a stub returns zeros): STRING inputs use decoded content length;
-        otherwise the largest non-batch input dim."""
+        otherwise the runtime size of axes the config declares dynamic (-1), so a
+        fixed feature dim (e.g. 1024 on a [-1, 1024] input) never masquerades as
+        the sequence length."""
         best = 0
         for spec in self._inputs:
             tensor = pb_utils.get_input_tensor_by_name(request, spec["name"])
@@ -59,10 +61,13 @@ class TritonPythonModel:
                     )
                     best = max(best, len(text))
             else:
-                # Skip the leading batch dim when batching is enabled.
-                dims = arr.shape[1:] if self._max_batch > 0 else arr.shape
-                for dim in dims:
-                    best = max(best, int(dim))
+                # Skip the leading batch dim when batching is enabled; pair each
+                # config dim with its runtime size and measure only the -1 axes.
+                cfg_dims = [int(d) for d in spec["dims"]]
+                runtime = arr.shape[1:] if self._max_batch > 0 else arr.shape
+                for cfg_dim, size in zip(cfg_dims, runtime):
+                    if cfg_dim == -1:
+                        best = max(best, int(size))
         return best or _DEFAULT_DYNAMIC
 
     def _batch_size(self, request):

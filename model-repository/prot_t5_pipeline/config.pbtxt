@@ -49,6 +49,22 @@ ensemble_scheduling {
       }
       output_map {
         key: "last_hidden_state"
+        value: "_last_hidden_state"
+      }
+    },
+    {
+      model_name: "_internal_prott5_postprocess"
+      model_version: 1
+      input_map {
+        key: "last_hidden_state"
+        value: "_last_hidden_state"
+      }
+      input_map {
+        key: "attention_mask"
+        value: "attention_mask"
+      }
+      output_map {
+        key: "embeddings"
         value: "embeddings"
       }
     }

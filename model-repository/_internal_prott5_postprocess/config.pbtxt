@@ -1,0 +1,33 @@
+name: "_internal_prott5_postprocess"
+backend: "python"
+max_batch_size: 8
+
+input [
+  {
+    name: "last_hidden_state"
+    data_type: TYPE_FP16
+    dims: [ -1, 1024 ]
+  },
+  {
+    name: "attention_mask"
+    data_type: TYPE_INT64
+    dims: [ -1 ]
+  }
+]
+
+output [
+  {
+    name: "embeddings"
+    data_type: TYPE_FP16
+    dims: [ -1, 1024 ]
+  }
+]
+
+instance_group [ { count: 1, kind: KIND_AUTO } ]
+
+# Shared CPU conda-pack env, sibling envs/ tree resolved relative to the model
+# repository so the mount path can differ dev vs prod.
+parameters: {
+  key: "EXECUTION_ENV_PATH"
+  value: { string_value: "$$TRITON_MODEL_DIRECTORY/../../envs/cpu_py312.tar.gz" }
+}
