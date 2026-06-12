@@ -5,6 +5,7 @@ import {
 } from '@protifer/triton-client'
 
 import { ShapeError, DecodeError } from './errors.ts'
+import { outputIndexByName } from './tensor-io.ts'
 import type { ModelAdapter } from './types.ts'
 
 // TMbed CV model output: 5 classes per residue [B, H, S, i, o].
@@ -34,8 +35,11 @@ export const tmbedAdapter: ModelAdapter<'tmbed'> = {
   },
 
   decodeResponse(response) {
-    // labels: BYTES output[0], expected exactly 1 string entry.
-    const labelsBuf = readInferOutputBuffer(response, 0)
+    // labels: BYTES, expected exactly 1 string entry.
+    const labelsBuf = readInferOutputBuffer(
+      response,
+      outputIndexByName(response, 'labels'),
+    )
     if (labelsBuf.length === 0) {
       throw new ShapeError('tmbed: empty labels output')
     }
@@ -51,8 +55,11 @@ export const tmbedAdapter: ModelAdapter<'tmbed'> = {
     }
     const labels = firstEntry.toString('utf8')
 
-    // probabilities: FP32 output[1], shape [seqLen, 5] row-major.
-    const probFlat = readFp32Output(response, 1)
+    // probabilities: FP32, shape [seqLen, 5] row-major.
+    const probFlat = readFp32Output(
+      response,
+      outputIndexByName(response, 'probabilities'),
+    )
     if (probFlat.length % N_TMBED_CLASSES !== 0) {
       throw new ShapeError(
         `tmbed: probabilities length ${String(probFlat.length)} not divisible by ${String(N_TMBED_CLASSES)}`,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { bindEmbedAdapter } from './bind_embed.ts'
-import { ShapeError } from './errors.ts'
+import { ShapeError, DecodeError } from './errors.ts'
 
 function makeFp32Buffer(values: number[]): Buffer {
   const buf = Buffer.alloc(values.length * 4)
@@ -176,6 +176,31 @@ describe('bindEmbedAdapter', () => {
       }
       expect(() => bindEmbedAdapter.decodeResponse(response)).toThrow(
         ShapeError,
+      )
+    })
+
+    it('throws DecodeError when an expected output name is absent (5 outputs, one misnamed)', () => {
+      // By-name decode catches a misrouted output that positional decode would
+      // silently read from the wrong buffer. output_4 is replaced by "extra".
+      const seqLen = 2
+      const vals = new Array(seqLen * 3).fill(0.0) as number[]
+      const names = ['output_0', 'output_1', 'output_2', 'output_3', 'extra']
+      const response = {
+        model_name: 'bind_embed',
+        outputs: names.map((name) => ({
+          name,
+          datatype: 'FP32',
+          shape: [seqLen, 3],
+          contents: {
+            fp32_contents: [],
+            bytes_contents: [],
+            int64_contents: [],
+          },
+        })),
+        raw_output_contents: names.map(() => makeFp32Buffer(vals)),
+      }
+      expect(() => bindEmbedAdapter.decodeResponse(response)).toThrow(
+        DecodeError,
       )
     })
   })
