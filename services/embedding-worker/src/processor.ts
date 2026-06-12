@@ -4,7 +4,7 @@ import type {
   Job,
   ObjectStore,
 } from '@protifer/shared'
-import { embeddingRefKey } from '@protifer/shared'
+import { UnrecoverableError, embeddingRefKey } from '@protifer/shared'
 import {
   DEFAULT_DEADLINE_MS,
   fp32ArrayToFp16Buffer,
@@ -54,9 +54,15 @@ export async function processEmbeddingJob(
 
   await job.updateProgress(70)
 
+  // Output-contract violations below are deterministic for a given model +
+  // input: retrying yields the identical bad shape, so fail fast
+  // (UnrecoverableError) instead of burning all 5 attempts before the failure
+  // surfaces to the client.
   const output = response.outputs[0]
   if (!output)
-    throw new Error('Triton returned no output tensor for prot_t5_pipeline')
+    throw new UnrecoverableError(
+      'Triton returned no output tensor for prot_t5_pipeline',
+    )
 
   // Primary path: FP16 raw bytes directly off the wire → Garage.
   let fp16Buf: Buffer = response.raw_output_contents[0] ?? Buffer.alloc(0)
@@ -67,7 +73,7 @@ export async function processEmbeddingJob(
   }
 
   if (fp16Buf.length === 0 || fp16Buf.length % 2 !== 0) {
-    throw new Error(
+    throw new UnrecoverableError(
       `prot_t5_pipeline: invalid FP16 output length ${String(fp16Buf.length)}`,
     )
   }
@@ -76,7 +82,7 @@ export async function processEmbeddingJob(
   // (EOS/leading) leaked through the pipeline — fail loud, never store.
   const rows = fp16Buf.length / 2 / 1024
   if (rows !== sequence.length) {
-    throw new Error(
+    throw new UnrecoverableError(
       `prot_t5_pipeline: embedding row count ${String(rows)} != sequence length ${String(sequence.length)}`,
     )
   }
