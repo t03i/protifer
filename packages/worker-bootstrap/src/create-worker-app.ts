@@ -9,6 +9,7 @@ import type {
   Processor,
 } from '@protifer/shared'
 import {
+  UnrecoverableError,
   createWorker as defaultCreateWorker,
   defaultPinoOptions,
   mintRequestId,
@@ -27,6 +28,21 @@ const ZERO_SPAN_ID = '0'.repeat(16)
 // resistant across arbitrary inbound id formats.
 export function deriveTraceIdFromRequestId(requestId: string): string {
   return createHash('sha256').update(requestId).digest('hex').slice(0, 32)
+}
+
+/**
+ * A BullMQ `failed` event fires on every attempt. A failure is terminal — and
+ * worth escalating to Sentry — only when no retry remains: attempts are
+ * exhausted, or the error is an `UnrecoverableError` (which never retries), or
+ * there is no job to reason about (capture rather than silently drop).
+ */
+export function isTerminalJobFailure(
+  job: { attemptsMade: number; opts?: { attempts?: number } } | undefined,
+  err: unknown,
+): boolean {
+  if (err instanceof UnrecoverableError) return true
+  if (!job) return true
+  return job.attemptsMade >= (job.opts?.attempts ?? 1)
 }
 
 function wrapProcessorWithSentry<D, R>(
@@ -184,6 +200,12 @@ export async function createWorkerApp<D, R>(
       { jobId: job?.id, request_id: requestId, err },
       `${name} job failed`,
     )
+
+    // Escalate to Sentry only once the job is terminally failed — not on every
+    // intermediate retry — so a transient blip that later succeeds (or simply
+    // retries) doesn't open duplicate issues.
+    if (!isTerminalJobFailure(job, err)) return
+
     Sentry.withScope((scope) => {
       if (job?.id) scope.setTag('job.id', job.id)
       scope.setTag('job.queue', queueName)

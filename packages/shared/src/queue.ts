@@ -3,6 +3,9 @@ import type { QueueOptions, WorkerOptions, Processor } from 'bullmq'
 import IORedis from 'ioredis'
 
 export { Queue, FlowProducer, QueueEvents }
+// Value re-export: lets workers mark deterministic failures non-retryable
+// without taking a direct bullmq dependency.
+export { UnrecoverableError } from 'bullmq'
 export type { Worker, Job, WorkerOptions, FlowJob, Processor } from 'bullmq'
 export type { Redis } from 'ioredis'
 

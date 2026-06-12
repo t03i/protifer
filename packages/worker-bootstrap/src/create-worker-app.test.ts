@@ -3,6 +3,7 @@ import {
   QUEUE_RATE_LIMIT_MAX,
   QUEUE_RATE_LIMIT_DURATION_MS,
   WORKER_CONCURRENCY,
+  UnrecoverableError,
   getCorrelation,
 } from '@protifer/shared'
 import { describe, it, expect, vi, afterEach } from 'vitest'
@@ -10,6 +11,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   createWorkerApp,
   deriveTraceIdFromRequestId,
+  isTerminalJobFailure,
 } from './create-worker-app.ts'
 
 afterEach(() => {
@@ -437,6 +439,40 @@ describe('createWorkerApp', () => {
     expect(a).toBe(b)
     expect(a).not.toBe(c)
     expect(c).toMatch(/^[0-9a-f]{32}$/)
+  })
+
+  it('treats a job failure as terminal only when no retry remains', () => {
+    // Attempt 1 of 5 with a retryable error → BullMQ will retry → not terminal.
+    expect(
+      isTerminalJobFailure(
+        { attemptsMade: 1, opts: { attempts: 5 } },
+        new Error('transient'),
+      ),
+    ).toBe(false)
+
+    // Final attempt exhausted → terminal.
+    expect(
+      isTerminalJobFailure(
+        { attemptsMade: 5, opts: { attempts: 5 } },
+        new Error('exhausted'),
+      ),
+    ).toBe(true)
+
+    // UnrecoverableError never retries → terminal even on the first attempt.
+    expect(
+      isTerminalJobFailure(
+        { attemptsMade: 1, opts: { attempts: 5 } },
+        new UnrecoverableError('bad output shape'),
+      ),
+    ).toBe(true)
+
+    // No attempts configured defaults to a single attempt → terminal.
+    expect(isTerminalJobFailure({ attemptsMade: 1 }, new Error('once'))).toBe(
+      true,
+    )
+
+    // No job to reason about → capture rather than drop.
+    expect(isTerminalJobFailure(undefined, new Error('orphan'))).toBe(true)
   })
 
   it('SIGTERM handler survives Redis quit failure and still exits', async () => {
