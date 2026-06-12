@@ -1,18 +1,44 @@
+import NightingaleColoredSequenceElement from '@nightingale-elements/nightingale-colored-sequence'
+import NightingaleLinegraphTrackElement from '@nightingale-elements/nightingale-linegraph-track'
+import NightingaleManagerElement from '@nightingale-elements/nightingale-manager'
+import NightingaleNavigationElement from '@nightingale-elements/nightingale-navigation'
+import NightingaleSequenceElement from '@nightingale-elements/nightingale-sequence'
+import NightingaleSequenceHeatmapElement from '@nightingale-elements/nightingale-sequence-heatmap'
+import NightingaleTrackElement from '@nightingale-elements/nightingale-track'
+import NightingaleVariationElement from '@nightingale-elements/nightingale-variation'
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 
 import { useSelection } from '#/features/structure/context/selection'
 import { useVisualizationRefs } from '#/features/structure/context/visualization-refs'
 
-// Side-effect imports — register custom elements in the DOM registry once
-import '@nightingale-elements/nightingale-manager'
-import '@nightingale-elements/nightingale-navigation'
-import '@nightingale-elements/nightingale-sequence'
-import '@nightingale-elements/nightingale-colored-sequence'
-import '@nightingale-elements/nightingale-track'
-import '@nightingale-elements/nightingale-linegraph-track'
-import '@nightingale-elements/nightingale-variation'
-import '@nightingale-elements/nightingale-sequence-heatmap'
+// Register custom elements in the DOM registry once. Each package declares
+// `sideEffects: false`, so the production build tree-shakes a bare
+// `import '...'` and the @customElementOnce decorator that registers the
+// element never runs — leaving un-upgraded elements (e.g.
+// `setHeatmapData is not a function`). Import the element classes and reference
+// them below so the modules are retained and their decorators self-register.
+
+const NIGHTINGALE_ELEMENTS: ReadonlyArray<[string, CustomElementConstructor]> =
+  [
+    ['nightingale-manager', NightingaleManagerElement],
+    ['nightingale-navigation', NightingaleNavigationElement],
+    ['nightingale-sequence', NightingaleSequenceElement],
+    ['nightingale-colored-sequence', NightingaleColoredSequenceElement],
+    ['nightingale-track', NightingaleTrackElement],
+    ['nightingale-linegraph-track', NightingaleLinegraphTrackElement],
+    ['nightingale-variation', NightingaleVariationElement],
+    ['nightingale-sequence-heatmap', NightingaleSequenceHeatmapElement],
+  ]
+
+// The imports above self-register via a decorator on evaluation; this guarded
+// loop both anchors that reference (so the bundler can't drop the modules) and
+// acts as a fallback registrar.
+for (const [tagName, ElementClass] of NIGHTINGALE_ELEMENTS) {
+  if (!customElements.get(tagName)) {
+    customElements.define(tagName, ElementClass)
+  }
+}
 
 interface Props {
   id: string
