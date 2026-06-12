@@ -288,6 +288,9 @@ services:
       - ../services/embedding-worker/src:/app/services/embedding-worker/src
       - ../packages/shared/src:/app/packages/shared/src
       - ../packages/triton-client/src:/app/packages/triton-client/src
+      # proto is loaded relative to src at runtime; mount it too so `--watch`
+      # picks up wire-contract changes without an image rebuild.
+      - ../packages/triton-client/proto:/app/packages/triton-client/proto
     depends_on:
       redis:
         condition: service_healthy
@@ -312,6 +315,9 @@ services:
       - ../services/prediction-worker/src:/app/services/prediction-worker/src
       - ../packages/shared/src:/app/packages/shared/src
       - ../packages/triton-client/src:/app/packages/triton-client/src
+      # proto is loaded relative to src at runtime; mount it too so `--watch`
+      # picks up wire-contract changes without an image rebuild.
+      - ../packages/triton-client/proto:/app/packages/triton-client/proto
     depends_on:
       redis:
         condition: service_healthy
