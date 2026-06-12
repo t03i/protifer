@@ -15,6 +15,12 @@ COPY --from=installer --chown=bun:bun /app .
 COPY --from=pruner --chown=bun:bun /app/out/full/ .
 WORKDIR /app/services/embedding-worker
 
+# Bake the build SHA so the worker's Sentry init tags release=<sha> instead of
+# "unknown" (packages/shared reads GIT_SHA). CI passes --build-arg GIT_SHA; an
+# undeclared ARG would be silently dropped, so it must be declared here.
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
+
 # Drop privileges to the uid-1000 `bun` user that ships with oven/bun images.
 # Worker does not open any listening port and does not write to the app dir
 # at runtime (S3 + Redis are the only persistence paths).
