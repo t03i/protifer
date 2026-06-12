@@ -36,6 +36,22 @@ describe('fetchSequenceById', () => {
       'Could not find a sequence',
     )
   })
+
+  it('throws SequenceException (not TypeError) for an inactive/deleted entry with no sequence', async () => {
+    // UniProt returns HTTP 200 with no `sequence` field for obsolete entries.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          entryType: 'Inactive',
+          primaryAccession: 'A0A654IBU3',
+          inactiveReason: { inactiveReasonType: 'DELETED' },
+        }),
+        { status: 200 },
+      ),
+    )
+
+    await expect(fetchSequenceById('A0A654IBU3')).rejects.toThrow('no sequence')
+  })
 })
 
 describe('fetchSequenceByName', () => {

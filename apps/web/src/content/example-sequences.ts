@@ -11,33 +11,33 @@ export interface ExampleSequence {
   description: string
 }
 
-const GAP_JUNCTION_SEQUENCE =
-  'MCCPCCCRARGRVSVWELGIVAGVLGVAVYDAAYVLGVRFVHDHSLQVIRELERRFPSGSIYHLRQQTITYSYILEHPSYLMSYMNPLPIYMLFLSMYVLAIFTKLRENDQFIKLCGVFCKKHSPSNMMADILWYCEDEALCTCWAAIRQMWVEVFPHTQWAATLILPHAMLPHVNAILLGMCFL'
+const P53_SEQUENCE =
+  'MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQKTYQGSYGFRLGFLHSGTAKSVTCTYSPALNKMFCQLAKTCPVQLWVDSTPPPGTRVRAMAIYKQSQHMTEVVRRCPHHERCSDSDGLAPPQHLIRVEGNLRVEYLDDRNTFRHSVVVPYEPPEVGSDCTTIHYNYMCNSSCMGGMNRRPILTIITLEDSSGNLLGRNSFEVRVCACPGRDRRTEEENLRKKGEPHHELPPGSTKRALPNNTSSSPQPKKKPLDGEYFTLQIRGRERFEMFRELNEALELKDAQAGKEPGGSRAHSSHLKSKKGQSTSRHKKLMFKTEGPDSD'
 
 export const exampleSequences: readonly ExampleSequence[] = [
   {
     format: 'fasta',
     label: 'FASTA',
-    value: `>tr|A0A654IBU3|A0A654IBU3_HUMAN Gap junction protein
-${GAP_JUNCTION_SEQUENCE}`,
-    description: 'FASTA record for human gap junction protein A0A654IBU3.',
+    value: `>sp|P04637|P53_HUMAN Cellular tumor antigen p53
+${P53_SEQUENCE}`,
+    description: 'FASTA record for human cellular tumor antigen p53 (P04637).',
   },
   {
     format: 'uniprot_id',
     label: 'UniProt accession',
-    value: 'A0A654IBU3',
-    description: 'UniProt accession for human gap junction protein.',
+    value: 'P04637',
+    description: 'UniProt accession for human cellular tumor antigen p53.',
   },
   {
     format: 'uniprot_protein_name',
     label: 'Protein name',
-    value: 'A0A654IBU3_HUMAN',
+    value: 'P53_HUMAN',
     description: 'UniProt protein name for the same entry.',
   },
   {
     format: 'sequence',
     label: 'Amino acids',
-    value: GAP_JUNCTION_SEQUENCE,
+    value: P53_SEQUENCE,
     description: 'Plain amino-acid sequence (IUPAC single-letter codes).',
   },
 ] as const

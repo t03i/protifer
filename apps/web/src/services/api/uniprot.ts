@@ -6,7 +6,9 @@ const UNIPROT_BASE = 'https://rest.uniprot.org'
 
 interface UniprotEntry {
   primaryAccession: string
-  sequence: { value: string }
+  // Absent for obsolete/deleted/demerged entries, which UniProt still returns
+  // with HTTP 200 and `entryType: "Inactive"` — guarded in toSequenceResult.
+  sequence?: { value: string }
 }
 
 async function queryUniprot(url: string): Promise<UniprotEntry> {
@@ -48,6 +50,11 @@ async function queryUniprot(url: string): Promise<UniprotEntry> {
 }
 
 function toSequenceResult(entry: UniprotEntry): SequenceResult {
+  if (!entry.sequence?.value) {
+    throw new SequenceException(
+      'This UniProt entry has no sequence — it may be obsolete or deleted. Please try a different identifier.',
+    )
+  }
   return {
     accession: entry.primaryAccession,
     sequence: entry.sequence.value,
@@ -72,7 +79,7 @@ export async function fetchSequenceByName(
 }
 
 export async function getUniprotStatus(): Promise<string> {
-  const testAccession = 'A0A654IBU3'
+  const testAccession = 'P04637'
   const url = `${UNIPROT_BASE}/uniprotkb/${testAccession}?fields=accession&format=json`
   const entry = await queryUniprot(url)
   if (entry.primaryAccession !== testAccession) {
