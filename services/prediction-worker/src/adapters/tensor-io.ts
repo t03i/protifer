@@ -2,6 +2,8 @@ import type { InferResponse } from '@protifer/triton-client'
 
 import { DecodeError } from './errors.ts'
 
+const EMBED_DIM = 1024
+
 /**
  * Resolve the index of a named output in a Triton response. Triton does not
  * guarantee outputs come back in requested/config order (notably ensembles —
@@ -21,6 +23,34 @@ export function outputIndexByName(
     )
   }
   return idx
+}
+
+/**
+ * Transpose a row-major [seqLen, 1024] embedding into channels-first
+ * [1024, seqLen] layout and return it as a raw FP32 Buffer.
+ *
+ * Conv1d-based models (LightAttention, bind_embed) take input as
+ * [batch, embeddings_dim=1024, sequence_length]; the worker holds embeddings
+ * as [seqLen, 1024], so adapters for those models must transpose. Sending
+ * channels-last makes Triton's first Conv read seqLen as the channel dim
+ * (`C: <seqLen> kernel channels: 1024`). Indexing mirrors bind_embed:
+ * transposed[c * seqLen + r] = embeddingFp32[r * 1024 + c].
+ */
+export function channelsFirstEmbeddingBuffer(
+  embeddingFp32: Float32Array,
+  seqLen: number,
+): Buffer {
+  const transposed = new Float32Array(EMBED_DIM * seqLen)
+  for (let r = 0; r < seqLen; r++) {
+    for (let c = 0; c < EMBED_DIM; c++) {
+      transposed[c * seqLen + r] = embeddingFp32[r * EMBED_DIM + c] ?? 0
+    }
+  }
+  return Buffer.from(
+    transposed.buffer,
+    transposed.byteOffset,
+    transposed.byteLength,
+  )
 }
 
 /**

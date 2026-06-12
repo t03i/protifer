@@ -1,7 +1,7 @@
 import { readFp32Output } from '@protifer/triton-client'
 
 import { ShapeError } from './errors.ts'
-import { argmaxSlice } from './tensor-io.ts'
+import { argmaxSlice, channelsFirstEmbeddingBuffer } from './tensor-io.ts'
 import type { ModelAdapter } from './types.ts'
 
 // From HannesStark/protein-localization commit 7b0be1e utils/general.py:
@@ -18,16 +18,13 @@ export const lightAttentionMembraneAdapter: ModelAdapter<'light_attention_membra
     outputKey: 'light_attention_membrane',
 
     buildRequest({ embeddingFp32, mask, seqLen }) {
-      const embBuf = Buffer.from(
-        embeddingFp32.buffer,
-        embeddingFp32.byteOffset,
-        embeddingFp32.byteLength,
-      )
+      // LightAttention Conv1d expects channels-first [1, 1024, seqLen].
+      const embBuf = channelsFirstEmbeddingBuffer(embeddingFp32, seqLen)
       const maskBuf = Buffer.from(mask.buffer, mask.byteOffset, mask.byteLength)
       return {
         model_name: 'light_attention_membrane',
         inputs: [
-          { name: 'input', datatype: 'FP32', shape: [1, seqLen, 1024] },
+          { name: 'input', datatype: 'FP32', shape: [1, 1024, seqLen] },
           { name: 'mask', datatype: 'FP32', shape: [1, seqLen] },
         ],
         outputs: [{ name: 'output' }],

@@ -69,6 +69,38 @@ describe('lightAttentionSubcellAdapter', () => {
       expect(req.outputs).toEqual([{ name: 'output' }])
       expect(req.raw_input_contents).toHaveLength(2)
     })
+
+    it('sends input channels-first [1, 1024, seqLen] with transposed embedding', () => {
+      const seqLen = 3
+      // Mark each residue r with value r in all 1024 dims.
+      const embeddingFp32 = new Float32Array(seqLen * 1024)
+      for (let r = 0; r < seqLen; r++) {
+        for (let c = 0; c < 1024; c++) {
+          embeddingFp32[r * 1024 + c] = r
+        }
+      }
+      const mask = new Float32Array(seqLen).fill(1.0)
+      const req = lightAttentionSubcellAdapter.buildRequest({
+        embeddingFp32,
+        mask,
+        seqLen,
+        sequence: 'MKT',
+      })
+
+      // Conv1d wants embeddings_dim (1024) on the channel axis, not seqLen.
+      expect(req.inputs.at(0)?.shape).toEqual([1, 1024, seqLen])
+
+      // Verify transpose: buf[c * seqLen + r] === r.
+      const buf = req.raw_input_contents?.at(0)
+      expect(buf).toBeDefined()
+      if (!buf) return
+      const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+      for (let c = 0; c < 1024; c++) {
+        for (let r = 0; r < seqLen; r++) {
+          expect(dv.getFloat32((c * seqLen + r) * 4, true)).toBeCloseTo(r)
+        }
+      }
+    })
   })
 
   describe('decodeResponse', () => {
