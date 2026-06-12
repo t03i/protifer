@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { ShapeError } from './errors.ts'
+import { ShapeError, DecodeError } from './errors.ts'
 import { prott5SecAdapter } from './prott5_sec.ts'
 
 function makeFp32Buffer(values: number[]): Buffer {
@@ -125,6 +125,50 @@ describe('prott5SecAdapter', () => {
     })
   })
 
+  describe('decodeResponse (output ordering)', () => {
+    it('decodes correctly when Triton returns outputs reversed (d8_Yhat, d3_Yhat)', () => {
+      const seqLen = 4
+      const d3Values = [9, 0, 0, 0, 9, 0, 0, 0, 9, 9, 0, 0] // HECH
+      const d8Values = [
+        9, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0,
+        0, 0, 0, 9, 0, 0, 0, 0,
+      ] // HGIB
+      const d3Buf = makeFp32Buffer(d3Values)
+      const d8Buf = makeFp32Buffer(d8Values)
+
+      const response = {
+        model_name: 'prott5_sec',
+        outputs: [
+          {
+            name: 'd8_Yhat',
+            datatype: 'FP32',
+            shape: [seqLen, 8],
+            contents: {
+              fp32_contents: [],
+              bytes_contents: [],
+              int64_contents: [],
+            },
+          },
+          {
+            name: 'd3_Yhat',
+            datatype: 'FP32',
+            shape: [seqLen, 3],
+            contents: {
+              fp32_contents: [],
+              bytes_contents: [],
+              int64_contents: [],
+            },
+          },
+        ],
+        raw_output_contents: [d8Buf, d3Buf],
+      }
+
+      const result = prott5SecAdapter.decodeResponse(response)
+      expect(result.dssp3).toBe('HECH')
+      expect(result.dssp8).toBe('HGIB')
+    })
+  })
+
   describe('decodeResponse (contents.fp32_contents fallback)', () => {
     it('falls back to fp32_contents when raw_output_contents is empty', () => {
       const seqLen = 2
@@ -169,14 +213,14 @@ describe('prott5SecAdapter', () => {
   })
 
   describe('error handling', () => {
-    it('throws ShapeError when d3 output is empty', () => {
+    it('throws DecodeError when the d3_Yhat output is absent', () => {
       const response = {
         model_name: 'prott5_sec',
         outputs: [],
         raw_output_contents: [],
       }
       expect(() => prott5SecAdapter.decodeResponse(response)).toThrow(
-        ShapeError,
+        DecodeError,
       )
     })
 

@@ -5,7 +5,7 @@ import {
 } from '@protifer/triton-client'
 
 import { ShapeError } from './errors.ts'
-import { argmaxSlice } from './tensor-io.ts'
+import { argmaxSlice, outputIndexByName } from './tensor-io.ts'
 import type { ModelAdapter } from './types.ts'
 
 export const prott5SecAdapter: ModelAdapter<'prott5_secondary_structure'> = {
@@ -27,7 +27,10 @@ export const prott5SecAdapter: ModelAdapter<'prott5_secondary_structure'> = {
   },
 
   decodeResponse(response) {
-    const d3Flat = readFp32Output(response, 0)
+    const d3Flat = readFp32Output(
+      response,
+      outputIndexByName(response, 'd3_Yhat'),
+    )
     if (d3Flat.length === 0) {
       throw new ShapeError('prott5_sec: d3_Yhat output is empty or missing')
     }
@@ -38,7 +41,10 @@ export const prott5SecAdapter: ModelAdapter<'prott5_secondary_structure'> = {
     }
     const seqLen = d3Flat.length / DSSP3_LABELS.length
 
-    const d8Flat = readFp32Output(response, 1)
+    const d8Flat = readFp32Output(
+      response,
+      outputIndexByName(response, 'd8_Yhat'),
+    )
     if (d8Flat.length === 0) {
       throw new ShapeError('prott5_sec: d8_Yhat output is empty or missing')
     }

@@ -1,6 +1,7 @@
 import { readFp32Output } from '@protifer/triton-client'
 
 import { ShapeError } from './errors.ts'
+import { outputIndexByName } from './tensor-io.ts'
 import type { ModelAdapter } from './types.ts'
 
 // Values pinned to bindEmbed21DL commit c9b12e7 (Rostlab/bindPredict, master).
@@ -53,7 +54,10 @@ export const bindEmbedAdapter: ModelAdapter<'bindembed'> = {
 
     const cvs: Float32Array[] = []
     for (let i = 0; i < NUM_CVS; i++) {
-      const cv = readFp32Output(response, i)
+      const cv = readFp32Output(
+        response,
+        outputIndexByName(response, `output_${String(i)}`),
+      )
       if (cv.length === 0 || cv.length % NUM_CHANNELS !== 0) {
         throw new ShapeError(
           `bind_embed cv${String(i)}: length ${String(cv.length)} not divisible by ${String(NUM_CHANNELS)}`,
