@@ -3,9 +3,22 @@ import {
   readBytesTensor,
   readInferOutputBuffer,
 } from '@protifer/triton-client'
+import type { InferResponse } from '@protifer/triton-client'
 
 import { ShapeError, DecodeError } from './errors.ts'
 import type { ModelAdapter } from './types.ts'
+
+// Triton does not guarantee response outputs come back in requested order;
+// resolve each tensor by name so decode is order-independent (real-Triton
+// returned [probabilities, labels], which positional decode misread as a
+// corrupt BYTES tensor).
+function outputIndex(response: InferResponse, name: string): number {
+  const idx = response.outputs.findIndex((o) => o.name === name)
+  if (idx === -1) {
+    throw new DecodeError(`tmbed: response missing '${name}' output`)
+  }
+  return idx
+}
 
 // TMbed CV model output: 5 classes per residue [B, H, S, i, o].
 // Post-Viterbi ensemble output: probabilities shape [seqLen, 5].
@@ -34,8 +47,11 @@ export const tmbedAdapter: ModelAdapter<'tmbed'> = {
   },
 
   decodeResponse(response) {
-    // labels: BYTES output[0], expected exactly 1 string entry.
-    const labelsBuf = readInferOutputBuffer(response, 0)
+    // labels: BYTES, expected exactly 1 string entry.
+    const labelsBuf = readInferOutputBuffer(
+      response,
+      outputIndex(response, 'labels'),
+    )
     if (labelsBuf.length === 0) {
       throw new ShapeError('tmbed: empty labels output')
     }
@@ -51,8 +67,11 @@ export const tmbedAdapter: ModelAdapter<'tmbed'> = {
     }
     const labels = firstEntry.toString('utf8')
 
-    // probabilities: FP32 output[1], shape [seqLen, 5] row-major.
-    const probFlat = readFp32Output(response, 1)
+    // probabilities: FP32, shape [seqLen, 5] row-major.
+    const probFlat = readFp32Output(
+      response,
+      outputIndex(response, 'probabilities'),
+    )
     if (probFlat.length % N_TMBED_CLASSES !== 0) {
       throw new ShapeError(
         `tmbed: probabilities length ${String(probFlat.length)} not divisible by ${String(N_TMBED_CLASSES)}`,

@@ -103,6 +103,55 @@ describe('tmbedAdapter', () => {
       expect(result.probabilities[1]?.at(0)).toBeCloseTo(0.1)
     })
 
+    it('decodes correctly when Triton returns outputs in reversed order (probabilities, labels)', () => {
+      // Real Triton returned [probabilities, labels] — the opposite of the
+      // requested order — which positional decode misreads as a corrupt BYTES
+      // tensor (prod regression: "readBytesTensor: truncated payload").
+      const labelStr = 'BHio'
+      const seqLen = 4
+      const N_CLASSES = 5
+      const probValues: number[] = []
+      for (let r = 0; r < seqLen; r++) {
+        for (let c = 0; c < N_CLASSES; c++) {
+          probValues.push(r * 0.1 + c * 0.01)
+        }
+      }
+      const labelsBuf = makeBytesBuffer([labelStr])
+      const probBuf = makeFp32Buffer(probValues)
+
+      const response = {
+        model_name: 'tmbed',
+        outputs: [
+          {
+            name: 'probabilities',
+            datatype: 'FP32',
+            shape: [seqLen, N_CLASSES],
+            contents: {
+              fp32_contents: [],
+              bytes_contents: [],
+              int64_contents: [],
+            },
+          },
+          {
+            name: 'labels',
+            datatype: 'BYTES',
+            shape: [1],
+            contents: {
+              fp32_contents: [],
+              bytes_contents: [],
+              int64_contents: [],
+            },
+          },
+        ],
+        raw_output_contents: [probBuf, labelsBuf],
+      }
+
+      const result = tmbedAdapter.decodeResponse(response)
+      expect(result.labels).toBe('BHio')
+      expect(result.probabilities).toHaveLength(seqLen)
+      expect(result.probabilities[1]?.at(0)).toBeCloseTo(0.1)
+    })
+
     it('decodes labels from contents.bytes_contents fallback', () => {
       const labelStr = 'BH'
       const seqLen = 2
@@ -213,6 +262,28 @@ describe('tmbedAdapter', () => {
       }
 
       expect(() => tmbedAdapter.decodeResponse(response)).toThrow(ShapeError)
+    })
+
+    it('throws DecodeError when a named output is absent', () => {
+      const probBuf = makeFp32Buffer(new Array(5).fill(0.1) as number[])
+      const response = {
+        model_name: 'tmbed',
+        outputs: [
+          {
+            name: 'probabilities',
+            datatype: 'FP32',
+            shape: [1, 5],
+            contents: {
+              fp32_contents: [],
+              bytes_contents: [],
+              int64_contents: [],
+            },
+          },
+        ],
+        raw_output_contents: [probBuf],
+      }
+
+      expect(() => tmbedAdapter.decodeResponse(response)).toThrow(DecodeError)
     })
 
     it('throws ShapeError when labels output buffer is empty', () => {
