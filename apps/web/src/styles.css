@@ -77,6 +77,21 @@ code {
   --color-brand-rose: oklch(80% 0.05 15);
   --color-brand-sky: oklch(80% 0.06 230);
   --color-brand-wheat: oklch(92% 0.018 230);
+
+  --animate-progress-indeterminate: progress-indeterminate 1.1s ease-in-out
+    infinite;
+
+  @keyframes progress-indeterminate {
+    0% {
+      transform: translateX(-100%) scaleX(0.4);
+    }
+    50% {
+      transform: translateX(20%) scaleX(0.6);
+    }
+    100% {
+      transform: translateX(100%) scaleX(0.5);
+    }
+  }
 }
 
 @theme inline {
