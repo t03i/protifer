@@ -2,6 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { QueryCacheNotifyEvent } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 
+import { STATUS_PAGE_QUERY_KEY } from './useStatusPageApi'
+
 // Emit 'lost' after ERROR_THRESHOLD errors with no success within WINDOW_MS
 const ERROR_THRESHOLD = 3
 const WINDOW_MS = 30_000
@@ -20,6 +22,10 @@ export function useConnectionHealth(): ConnectionHealth {
 
     const unsubscribe = cache.subscribe((event: QueryCacheNotifyEvent) => {
       if (event.type !== 'updated') return
+
+      // The external BetterStack status fetch must not drive our own
+      // connection-lost signal — its slowness is not our backend going down.
+      if (event.query.queryKey[0] === STATUS_PAGE_QUERY_KEY[0]) return
 
       const state = event.query.state
 

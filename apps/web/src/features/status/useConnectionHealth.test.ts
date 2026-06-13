@@ -76,6 +76,31 @@ describe('useConnectionHealth', () => {
     expect(result.current).toBe('lost')
   })
 
+  it('ignores errors from the external status-page-api query', () => {
+    const queryClient = new QueryClient()
+    const { result } = renderHook(() => useConnectionHealth(), {
+      wrapper: wrapper(queryClient),
+    })
+
+    const cache = queryClient.getQueryCache()
+    act(() => {
+      for (let i = 0; i < 5; i++) {
+        const query = cache.build(queryClient, {
+          queryKey: ['status-page-api'],
+          queryFn: () => Promise.resolve('ok'),
+        })
+        query.setState({
+          status: 'error',
+          fetchStatus: 'idle',
+          error: new Error('BetterStack slow'),
+          data: undefined,
+        })
+      }
+    })
+
+    expect(result.current).toBe('ok')
+  })
+
   it('recovers to ok on success after being lost', () => {
     const queryClient = new QueryClient()
     const { result } = renderHook(() => useConnectionHealth(), {
