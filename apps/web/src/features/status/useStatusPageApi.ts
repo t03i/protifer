@@ -2,11 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 
 import type { BetterStackStatusResponse, ServiceKind } from './types'
 
-/** Shared so `useConnectionHealth` can exclude this external query. */
 export const STATUS_PAGE_QUERY_KEY = ['status-page-api'] as const
 
-// Status changes rarely; cache long and hold the last-good value so a slow
-// BetterStack fetch never flips the indicator. 10s ceiling on a hung request.
+// Cache long and hold last-good so a slow BetterStack fetch never flips the indicator.
 const STATUS_CACHE_MS = 5 * 60_000
 const FETCH_TIMEOUT_MS = 10_000
 

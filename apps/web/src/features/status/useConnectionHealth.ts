@@ -23,8 +23,7 @@ export function useConnectionHealth(): ConnectionHealth {
     const unsubscribe = cache.subscribe((event: QueryCacheNotifyEvent) => {
       if (event.type !== 'updated') return
 
-      // The external BetterStack status fetch must not drive our own
-      // connection-lost signal — its slowness is not our backend going down.
+      // External status fetch must not drive our own connection-lost signal.
       if (event.query.queryKey[0] === STATUS_PAGE_QUERY_KEY[0]) return
 
       const state = event.query.state
