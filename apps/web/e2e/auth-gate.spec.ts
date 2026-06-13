@@ -41,10 +41,15 @@ test.describe('mobile 375px', () => {
     })
     await expect(loginBtn).toBeVisible()
 
-    // WCAG 2.5.5: minimum touch target 44x44px (issue #58)
-    const box = await loginBtn.boundingBox()
-    expect(box).not.toBeNull()
-    expect(box!.width).toBeGreaterThanOrEqual(44)
-    expect(box!.height).toBeGreaterThanOrEqual(44)
+    // WCAG 2.5.5: minimum touch target 44x44px (issue #58).
+    // Poll so the dialog's zoom-in-95 open animation (duration-200) has
+    // settled before asserting — boundingBox() does not wait for transforms,
+    // so an early measurement catches the button mid-scale (~43px).
+    await expect
+      .poll(async () => {
+        const box = await loginBtn.boundingBox()
+        return box ? Math.min(box.width, box.height) : 0
+      })
+      .toBeGreaterThanOrEqual(44)
   })
 })
