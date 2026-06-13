@@ -1,11 +1,19 @@
 // Throughput baseline (pro plan, 5 VUs, 3 minutes, collect-only).
+// Each iteration submits a UNIQUE random sequence so the run measures real Triton
+// inference, not the hash-keyed, immutable S3 cache-hit path — a fixed input becomes
+// a permanent cache hit after its first run and would under-report true cost. Length
+// is fixed (LOAD_TEST_SEQ_LENGTH, default 350) so per-run compute stays comparable for
+// trending. Set LOAD_TEST_CACHED=true for a cheap gateway-only run on a fixed accession.
 // Baseline metrics captured via `--out json=...` in nightly.yml; no latency/throughput thresholds.
 
 import http from 'k6/http'
 import { check } from 'k6'
+import { randomSequence } from './sequences.js'
 
 const BASE_URL = __ENV.PROD_GATEWAY_URL || 'http://localhost:3001'
 const API_KEY = __ENV.LOAD_TEST_PRO_BEARER || ''
+const USE_CACHED = __ENV.LOAD_TEST_CACHED === 'true'
+const SEQ_LENGTH = Number(__ENV.LOAD_TEST_SEQ_LENGTH || 350)
 
 export const options = {
   vus: 5,
@@ -30,20 +38,20 @@ export function setup() {
 }
 
 export default function () {
-  const res = http.post(
-    `${BASE_URL}/v1/predictions`,
-    JSON.stringify({ accession: 'P04637' }),
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        // Bearer auth via the better-auth apiKey plugin — resolves to the
-        // pro-plan user the key was minted for.
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      // Treat 2xx–4xx as non-failures so 429s don't inflate http_req_failed.
-      responseCallback: http.expectedStatuses({ min: 200, max: 499 }),
+  // Unique sequence per request → cache miss → real inference; fixed length keeps runs comparable.
+  const body = USE_CACHED
+    ? JSON.stringify({ accession: 'P04637' })
+    : JSON.stringify({ sequence: randomSequence(SEQ_LENGTH) })
+  const res = http.post(`${BASE_URL}/v1/predictions`, body, {
+    headers: {
+      'Content-Type': 'application/json',
+      // Bearer auth via the better-auth apiKey plugin — resolves to the
+      // pro-plan user the key was minted for.
+      Authorization: `Bearer ${API_KEY}`,
     },
-  )
+    // Treat 2xx–4xx as non-failures so 429s don't inflate http_req_failed.
+    responseCallback: http.expectedStatuses({ min: 200, max: 499 }),
+  })
 
   // Only check that no 5xx occurred — 429 responses are acceptable on a baseline run
   check(res, {

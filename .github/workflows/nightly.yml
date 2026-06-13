@@ -2,8 +2,13 @@ name: Weekly Load Tests
 
 on:
   schedule:
-    - cron: '0 2 * * 1' # 02:00 UTC Monday — weekly off-peak run
-  workflow_dispatch: # Manual trigger per Claude's discretion (RESEARCH recommendation)
+    - cron: '0 2 * * 1' # 02:00 UTC Monday — weekly off-peak run (rate-limiter + throughput only)
+  workflow_dispatch:
+    inputs:
+      include_shedding:
+        description: 'Also run the shedding calibration scenario (on-demand only — never scheduled; intentionally creates GPU pressure)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,7 +17,7 @@ jobs:
   load-tests:
     name: k6 Load Tests (Production)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -35,6 +40,15 @@ jobs:
         # Run even if rate-limiter step failed, so we always capture a baseline artifact
         if: ${{ !cancelled() }}
         run: k6 run --out json=k6-throughput-summary.json tests/load/throughput.js
+        env:
+          PROD_GATEWAY_URL: ${{ secrets.PROD_GATEWAY_URL }}
+          LOAD_TEST_PRO_BEARER: ${{ secrets.LOAD_TEST_PRO_BEARER }}
+
+      - name: Run shedding calibration scenario (on-demand only)
+        # Never runs on the weekly schedule — it deliberately drives the admission
+        # controller into shedding, so it must be triggered manually with the input set.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_shedding && !cancelled() }}
+        run: k6 run --out json=k6-shedding-summary.json tests/load/shedding.js
         env:
           PROD_GATEWAY_URL: ${{ secrets.PROD_GATEWAY_URL }}
           LOAD_TEST_PRO_BEARER: ${{ secrets.LOAD_TEST_PRO_BEARER }}
