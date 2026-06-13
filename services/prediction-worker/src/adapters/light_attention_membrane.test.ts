@@ -38,12 +38,41 @@ describe('lightAttentionMembraneAdapter', () => {
       expect(req.inputs).toHaveLength(2)
       expect(req.inputs.at(0)?.name).toBe('input')
       expect(req.inputs.at(0)?.datatype).toBe('FP32')
-      expect(req.inputs.at(0)?.shape).toEqual([1, seqLen, 1024])
+      expect(req.inputs.at(0)?.shape).toEqual([1, 1024, seqLen])
       expect(req.inputs.at(1)?.name).toBe('mask')
       expect(req.inputs.at(1)?.datatype).toBe('FP32')
       expect(req.inputs.at(1)?.shape).toEqual([1, seqLen])
       expect(req.outputs).toEqual([{ name: 'output' }])
       expect(req.raw_input_contents).toHaveLength(2)
+    })
+
+    it('sends input channels-first [1, 1024, seqLen] with transposed embedding', () => {
+      const seqLen = 3
+      const embeddingFp32 = new Float32Array(seqLen * 1024)
+      for (let r = 0; r < seqLen; r++) {
+        for (let c = 0; c < 1024; c++) {
+          embeddingFp32[r * 1024 + c] = r
+        }
+      }
+      const mask = new Float32Array(seqLen).fill(1.0)
+      const req = lightAttentionMembraneAdapter.buildRequest({
+        embeddingFp32,
+        mask,
+        seqLen,
+        sequence: 'MKT',
+      })
+
+      expect(req.inputs.at(0)?.shape).toEqual([1, 1024, seqLen])
+
+      const buf = req.raw_input_contents?.at(0)
+      expect(buf).toBeDefined()
+      if (!buf) return
+      const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+      for (let c = 0; c < 1024; c++) {
+        for (let r = 0; r < seqLen; r++) {
+          expect(dv.getFloat32((c * seqLen + r) * 4, true)).toBeCloseTo(r)
+        }
+      }
     })
   })
 

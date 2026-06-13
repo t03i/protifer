@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { argmaxSlice } from './tensor-io.ts'
+import { argmaxSlice, channelsFirstEmbeddingBuffer } from './tensor-io.ts'
 
 describe('argmaxSlice', () => {
   it('returns the index of the max within the slice (offset 0)', () => {
@@ -31,5 +31,29 @@ describe('argmaxSlice', () => {
 
   it('works with Float32Array', () => {
     expect(argmaxSlice(new Float32Array([0.2, 0.1, 0.9, 0.4]), 0, 4)).toBe(2)
+  })
+})
+
+describe('channelsFirstEmbeddingBuffer', () => {
+  it('transposes [seqLen, 1024] into channels-first [1024, seqLen]', () => {
+    const seqLen = 3
+    const embeddingFp32 = new Float32Array(seqLen * 1024)
+    for (let r = 0; r < seqLen; r++) {
+      for (let c = 0; c < 1024; c++) {
+        embeddingFp32[r * 1024 + c] = r * 1024 + c
+      }
+    }
+
+    const buf = channelsFirstEmbeddingBuffer(embeddingFp32, seqLen)
+    expect(buf.byteLength).toBe(1024 * seqLen * 4)
+
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+    for (let c = 0; c < 1024; c++) {
+      for (let r = 0; r < seqLen; r++) {
+        expect(dv.getFloat32((c * seqLen + r) * 4, true)).toBeCloseTo(
+          r * 1024 + c,
+        )
+      }
+    }
   })
 })
