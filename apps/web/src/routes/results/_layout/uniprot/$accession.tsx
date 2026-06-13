@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 
 import { ResultsPageShell } from '../ResultsPageShell'
+import { ResultsPageSkeleton } from '../ResultsPageSkeleton'
 
 import { fetchSequenceById } from '#/services/api/uniprot'
 
@@ -13,6 +14,7 @@ export const Route = createFileRoute('/results/_layout/uniprot/$accession')({
   validateSearch: (search: Record<string, unknown>): AccessionSearch => ({
     model: typeof search.model === 'string' ? search.model : undefined,
   }),
+  pendingComponent: ResultsPageSkeleton,
   component: UniprotResultsPage,
 })
 

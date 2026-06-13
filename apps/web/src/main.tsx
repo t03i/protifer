@@ -21,6 +21,8 @@ const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
   scrollRestoration: true,
+  defaultPendingMs: 500,
+  defaultPendingMinMs: 500,
   context: {
     queryClient,
     auth: undefined as unknown as AuthContextValue,
