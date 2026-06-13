@@ -2,6 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 
 import type { BetterStackStatusResponse, ServiceKind } from './types'
 
+export const STATUS_PAGE_QUERY_KEY = ['status-page-api'] as const
+
+// Cache long and hold last-good so a slow BetterStack fetch never flips the indicator.
+const STATUS_CACHE_MS = 5 * 60_000
+const FETCH_TIMEOUT_MS = 10_000
+
 function isValidResponse(data: unknown): data is BetterStackStatusResponse {
   return typeof data === 'object' && data !== null
 }
@@ -29,16 +35,20 @@ export function useStatusPageApi():
     | undefined
 
   const { data } = useQuery({
-    queryKey: ['status-page-api'] as const,
+    queryKey: STATUS_PAGE_QUERY_KEY,
     queryFn: async ({ signal }): Promise<BetterStackStatusResponse> => {
-      const res = await fetch(`${statusPageUrl}/index.json`, { signal })
+      const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      const res = await fetch(`${statusPageUrl}/index.json`, {
+        signal: AbortSignal.any([signal, timeout]),
+      })
       if (!res.ok) throw new Error(`Status API ${res.status}`)
       return res.json() as Promise<BetterStackStatusResponse>
     },
     enabled: Boolean(statusPageUrl),
-    refetchInterval: 60_000,
-    staleTime: 60_000,
-    retry: false,
+    refetchInterval: STATUS_CACHE_MS,
+    staleTime: STATUS_CACHE_MS,
+    gcTime: Infinity,
+    retry: 2,
   })
 
   if (!data || !isValidResponse(data)) return undefined
