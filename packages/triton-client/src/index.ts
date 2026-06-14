@@ -11,8 +11,6 @@ export type {
   TensorOutput,
   ModelInferOptions,
 } from './client.ts'
-export { startMockTritonServer } from './mock-server.ts'
-export type { MockTritonServer } from './mock-server.ts'
 export * from './constants.ts'
 export * from './float16.ts'
 export * from './tensor-io.ts'
