@@ -76,12 +76,6 @@
         "vitest": "^3.0.5",
       },
     },
-    "infra/mock-triton": {
-      "name": "@protifer/mock-triton",
-      "dependencies": {
-        "@protifer/triton-client": "workspace:*",
-      },
-    },
     "packages/eslint-config": {
       "name": "@protifer/eslint-config",
       "version": "0.0.1",
@@ -661,8 +655,6 @@
     "@protifer/embedding-worker": ["@protifer/embedding-worker@workspace:services/embedding-worker"],
 
     "@protifer/eslint-config": ["@protifer/eslint-config@workspace:packages/eslint-config"],
-
-    "@protifer/mock-triton": ["@protifer/mock-triton@workspace:infra/mock-triton"],
 
     "@protifer/prediction-worker": ["@protifer/prediction-worker@workspace:services/prediction-worker"],
 
