@@ -76,6 +76,9 @@ export function startEventSubscriber(
   let events: QueueEventsType | null = null
   let renewTimer: ReturnType<typeof setInterval> | null = null
 
+  // Fast-path decrement hint only. Throughput is now derived entirely from
+  // the leader sweep's drain-rate sampler, so a missed terminal event here
+  // self-heals at the next reconciliation instead of corrupting the estimate.
   async function handleTerminal(jobId: string): Promise<void> {
     if (!leader) return
     try {
@@ -85,20 +88,7 @@ export function startEventSubscriber(
       const residues = data?.sequence.length ?? 0
       if (residues <= 0) return
 
-      const finishedOn =
-        (job as unknown as { finishedOn?: number }).finishedOn ?? null
-      const processedOn =
-        (job as unknown as { processedOn?: number }).processedOn ?? null
-      const durationMs =
-        finishedOn !== null && processedOn !== null && finishedOn > processedOn
-          ? finishedOn - processedOn
-          : null
-      const durationSeconds = durationMs !== null ? durationMs / 1000 : null
-
       await state.decrementPending(residues)
-      if (durationSeconds !== null && durationSeconds > 0) {
-        await state.recordCompletion(residues, durationSeconds)
-      }
     } catch (err) {
       logger.warn({ err, jobId }, 'shedding: terminal event handler failed')
     }

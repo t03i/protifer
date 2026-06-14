@@ -4,6 +4,10 @@ export const PENDING_RESIDUES_KEY = 'shedding:pending_residues'
 export const THROUGHPUT_KEY = 'shedding:throughput_ewma'
 export const EWMA_FIELD = 'value'
 export const EWMA_TIMESTAMP_FIELD = 'last_sample_ms'
+// Monotonic residues admitted at the gateway; feeds the drain-rate sampler.
+export const ADMITTED_RESIDUES_KEY = 'shedding:admitted_residues_total'
+// Prior-sweep snapshot the sampler diffs against to derive departures.
+export const DRAIN_SNAPSHOT_KEY = 'shedding:drain_snapshot'
 
 export interface SheddingStateSnapshot {
   pendingResidues: number
@@ -19,6 +23,7 @@ export interface SheddingStateSnapshot {
 export interface SheddingRedis {
   incrby(key: string, amount: number): Promise<number>
   decrby(key: string, amount: number): Promise<number>
+  set(key: string, value: string): Promise<string | null>
   get(key: string): Promise<string | null>
   hget(key: string, field: string): Promise<string | null>
   hset(key: string, ...values: string[]): Promise<number>
@@ -66,6 +71,9 @@ export function createShedingState(deps: StateDeps) {
   const { redis, config } = deps
   const now = deps.clock?.now ?? Date.now
 
+  // increment/decrementPending are a between-sweeps fast-path hint only.
+  // The leader sweep's `setPending` reconciliation is authoritative — drift
+  // accumulated here (e.g. a missed terminal event) is overwritten each sweep.
   async function incrementPending(residues: number): Promise<number> {
     if (residues <= 0) return 0
     return redis.incrby(PENDING_RESIDUES_KEY, residues)
@@ -76,23 +84,72 @@ export function createShedingState(deps: StateDeps) {
     return redis.decrby(PENDING_RESIDUES_KEY, residues)
   }
 
-  async function recordCompletion(
-    residues: number,
-    durationSeconds: number,
-  ): Promise<number> {
-    if (!(residues > 0) || !(durationSeconds > 0)) return 0
-    const sample = residues / durationSeconds
-    const result = await redis.eval(
+  // Authoritative absolute write of the reconciled pending total (clamped
+  // >= 0). Overwrites, not adjusts — discarding accumulated event drift.
+  async function setPending(residues: number): Promise<number> {
+    const value = Math.max(0, Math.floor(residues))
+    await redis.set(PENDING_RESIDUES_KEY, String(value))
+    return value
+  }
+
+  async function incrAdmitted(residues: number): Promise<number> {
+    if (residues <= 0) return 0
+    return redis.incrby(ADMITTED_RESIDUES_KEY, residues)
+  }
+
+  /**
+   * Sweep-driven aggregate drain-rate sample. By flow conservation:
+   *   departures = max(0, arrivals − Δpending)
+   *   drain_rate = departures / Δt_seconds   (residues/sec, concurrency-aware)
+   * `arrivals` is the monotonic admitted counter's delta since the prior
+   * sweep; `Δpending` uses the just-reconciled `pendingNow`. Feeds the EWMA
+   * and snapshots admitted/pending/timestamp for the next interval. Skips the
+   * EWMA update (returns null) when no prior snapshot exists or Δt ≈ 0.
+   */
+  async function sampleThroughput(pendingNow: number): Promise<number | null> {
+    const nowMs = now()
+    const [admittedRaw, snap] = await Promise.all([
+      redis.get(ADMITTED_RESIDUES_KEY),
+      redis.hmget(DRAIN_SNAPSHOT_KEY, 'admitted', 'pending', 'ts'),
+    ])
+    const admittedTotal = admittedRaw === null ? 0 : Number(admittedRaw)
+    const [prevAdmittedRaw, prevPendingRaw, prevTsRaw] = snap
+
+    await redis.hset(
+      DRAIN_SNAPSHOT_KEY,
+      'admitted',
+      String(admittedTotal),
+      'pending',
+      String(pendingNow),
+      'ts',
+      String(nowMs),
+    )
+
+    if (
+      prevAdmittedRaw === null ||
+      prevPendingRaw === null ||
+      prevTsRaw === null
+    ) {
+      return null
+    }
+    const prevTs = Number(prevTsRaw)
+    const dtSeconds = (nowMs - prevTs) / 1000
+    if (!(dtSeconds > 0)) return null
+
+    const arrivals = admittedTotal - Number(prevAdmittedRaw)
+    const deltaPending = pendingNow - Number(prevPendingRaw)
+    const departures = Math.max(0, arrivals - deltaPending)
+    const drainRate = departures / dtSeconds
+
+    await redis.eval(
       EWMA_UPDATE_SCRIPT,
       1,
       THROUGHPUT_KEY,
       String(config.alpha),
-      String(sample),
-      String(now()),
+      String(drainRate),
+      String(nowMs),
     )
-    if (typeof result === 'string') return Number(result)
-    if (typeof result === 'number') return result
-    return 0
+    return drainRate
   }
 
   async function readState(): Promise<SheddingStateSnapshot> {
@@ -121,7 +178,9 @@ export function createShedingState(deps: StateDeps) {
   return {
     incrementPending,
     decrementPending,
-    recordCompletion,
+    setPending,
+    incrAdmitted,
+    sampleThroughput,
     readState,
   }
 }

@@ -120,6 +120,28 @@ groups:
             engaging (requests_shed_total). Sustained backlog with healthy
             workers means demand exceeds capacity.
 
+      - alert: SheddingPendingResidueLeak
+        expr: |
+          shedding_pending_residues > 0
+          and on()
+          sum(bullmq_queue_jobs{state=~"waiting|active"}) == 0
+        for: 15m
+        labels:
+          severity: warning
+          app: protifer
+        annotations:
+          summary: 'protifer: shedding pending-residues nonzero while queues idle'
+          description: |
+            shedding_pending_residues has stayed above zero for 15m with no
+            waiting or active jobs on any queue. Pending residues should
+            reconcile to zero on the job-cleanup leader sweep once work
+            drains — a stuck nonzero value at idle means admission accounting
+            drifted (a release path missed its decrement). Admission keeps
+            counting this phantom load against the SLO budget, so it will shed
+            real requests too early. Check the api-gateway logs and /metrics
+            (docker compose logs api-gateway on the app-tier host); restarting
+            the gateway resets the in-process counter as a stopgap.
+
       - alert: HighJobLatency
         expr: |
           histogram_quantile(0.95, sum by (le) (rate(bullmq_job_total_duration_seconds_bucket{queue="prediction"}[15m]))) > 1200

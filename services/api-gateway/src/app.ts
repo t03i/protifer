@@ -261,6 +261,7 @@ export function createApp(overrides?: {
       metrics,
       thresholdMs: config.jobCleanup.staleChildrenThresholdMs,
     }),
+    sheddingState,
     intervalMs: config.jobCleanup.reconcileIntervalMs,
     lockTtlMs: config.jobCleanup.lockTtlMs,
   })
