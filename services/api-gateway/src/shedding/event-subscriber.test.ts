@@ -147,7 +147,7 @@ describe('startEventSubscriber', () => {
     expect(events.close).toHaveBeenCalled()
   })
 
-  it('on completed: decrements pending residues and records throughput', async () => {
+  it('on completed: decrements pending as a hint, does not touch throughput', async () => {
     const job = makeJob({
       sequence: 'AAAA',
       processedOn: 1000,
@@ -157,7 +157,9 @@ describe('startEventSubscriber', () => {
       getJob: vi.fn().mockResolvedValue(job),
     } as unknown as Parameters<typeof startEventSubscriber>[0]['embeddingQueue']
 
-    const config = loadSheddingConfig({ SHED_ALPHA: '1' })
+    const config = loadSheddingConfig({
+      SHED_INITIAL_RESIDUES_PER_SECOND: '900',
+    })
     const state = createShedingState({ redis, config })
     await state.incrementPending(10)
     const events = makeFakeEvents()
@@ -181,9 +183,21 @@ describe('startEventSubscriber', () => {
     const snap = await state.readState()
     // Started at 10, decrement 4 → 6
     expect(snap.pendingResidues).toBe(6)
-    // sample = 4 residues / 4s = 1 r/s, alpha=1 → ewma=1
-    expect(snap.residuesPerSecondEwma).toBeCloseTo(1)
+    // Throughput is now sweep-derived; the event must not feed the EWMA.
+    expect(snap.residuesPerSecondEwma).toBe(900)
 
     await sub.close()
+  })
+
+  it('sweep reconciliation overrides accumulated event drift', async () => {
+    // A missed terminal event leaves the fast-path counter inflated; the
+    // leader sweep's setPending recompute overwrites it wholesale.
+    const config = loadSheddingConfig({})
+    const state = createShedingState({ redis, config })
+    await state.incrementPending(400_000) // leaked from missed decrements
+    expect((await state.readState()).pendingResidues).toBe(400_000)
+
+    await state.setPending(120) // reconciled from real queue state
+    expect((await state.readState()).pendingResidues).toBe(120)
   })
 })

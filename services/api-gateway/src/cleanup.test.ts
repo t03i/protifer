@@ -7,10 +7,15 @@ import {
   releaseLeaderLockIfOwner,
   runReconcileSweep,
   setupJobCleanup,
+  sumQueueResidues,
   trackJob,
   RECONCILE_LOCK_KEY,
 } from './cleanup.ts'
 import { createMetrics } from './metrics.ts'
+
+function queueWithJobs(jobs: { data: unknown }[]) {
+  return { getJobs: vi.fn().mockResolvedValue(jobs) } as never
+}
 
 function createMockEvents() {
   return new EventEmitter()
@@ -83,6 +88,7 @@ const mockLogger = {
 function createMockQueue() {
   return {
     getJob: vi.fn().mockResolvedValue(null),
+    getJobs: vi.fn().mockResolvedValue([]),
   }
 }
 
@@ -589,6 +595,137 @@ describe('periodic reconciliation loop', () => {
     await p
     await closePromise
     expect(redis.zrem).toHaveBeenCalled()
+  })
+})
+
+describe('sumQueueResidues', () => {
+  it('counts prediction parent + embedding child route-agnostically', async () => {
+    // Same flow: prediction parent sits in waiting-children, its embedding
+    // child runs in active — both contribute their sequence length.
+    const pq = queueWithJobs([{ data: { sequence: 'AAAAA' } }]) // parent: 5
+    const eq = queueWithJobs([{ data: { sequence: 'AAAAA' } }]) // child: 5
+    expect(await sumQueueResidues([pq, eq])).toBe(10)
+  })
+
+  it('reconciles to zero when queues are drained', async () => {
+    expect(await sumQueueResidues([queueWithJobs([]), queueWithJobs([])])).toBe(
+      0,
+    )
+  })
+
+  it('requests waiting, active, and waiting-children states', async () => {
+    const pq = queueWithJobs([])
+    await sumQueueResidues([pq])
+    expect(
+      (pq as unknown as { getJobs: ReturnType<typeof vi.fn> }).getJobs,
+    ).toHaveBeenCalledWith(['waiting', 'active', 'waiting-children'])
+  })
+
+  it('ignores jobs without sequence data', async () => {
+    const pq = queueWithJobs([
+      { data: undefined },
+      { data: { sequence: 'ABC' } },
+    ])
+    expect(await sumQueueResidues([pq])).toBe(3)
+  })
+})
+
+describe('shedding reconciliation on the leader sweep', () => {
+  let redis: ReturnType<typeof createMockRedis>
+  let pq: ReturnType<typeof createMockQueue>
+  let eq: ReturnType<typeof createMockQueue>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    redis = createMockRedis()
+    pq = createMockQueue()
+    eq = createMockQueue()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function setupWithState(sheddingState: unknown) {
+    return setupJobCleanup({
+      redis,
+      logger: mockLogger,
+      predictionEvents: createMockEvents(),
+      embeddingEvents: createMockEvents(),
+      predictionQueue: pq as never,
+      embeddingQueue: eq as never,
+      sheddingState: sheddingState as never,
+      intervalMs: 1000,
+    })
+  }
+
+  it('overwrites a stale counter with the true summed residues', async () => {
+    const setPending = vi.fn().mockResolvedValue(8)
+    const sampleThroughput = vi.fn().mockResolvedValue(null)
+    pq.getJobs.mockResolvedValue([{ data: { sequence: 'AAAAA' } }]) // 5
+    eq.getJobs.mockResolvedValue([{ data: { sequence: 'AAA' } }]) // 3
+
+    const handle = setupWithState({ setPending, sampleThroughput })
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Absolute set to the true sum — independent of any prior drifted value.
+    expect(setPending).toHaveBeenCalledWith(8)
+
+    vi.useRealTimers()
+    await handle.close()
+    vi.useFakeTimers()
+  })
+
+  it('samples throughput on the sweep (sweep-derived, not event-derived)', async () => {
+    const setPending = vi.fn().mockResolvedValue(5)
+    const sampleThroughput = vi.fn().mockResolvedValue(400)
+    pq.getJobs.mockResolvedValue([{ data: { sequence: 'AAAAA' } }]) // 5
+
+    const handle = setupWithState({ setPending, sampleThroughput })
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // No terminal events fired, yet throughput is still sampled — so a missed
+    // completion event cannot corrupt the estimate.
+    expect(sampleThroughput).toHaveBeenCalledWith(5)
+
+    vi.useRealTimers()
+    await handle.close()
+    vi.useFakeTimers()
+  })
+
+  it('reconciliation failure does not fail the sweep', async () => {
+    const setPending = vi.fn().mockRejectedValue(new Error('redis blip'))
+    const sampleThroughput = vi.fn()
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const metrics = createMetrics()
+
+    const handle = setupJobCleanup({
+      redis,
+      logger,
+      predictionEvents: createMockEvents(),
+      embeddingEvents: createMockEvents(),
+      predictionQueue: pq as never,
+      embeddingQueue: eq as never,
+      sheddingState: { setPending, sampleThroughput } as never,
+      metrics,
+      intervalMs: 1000,
+    })
+    await vi.advanceTimersByTimeAsync(1000)
+
+    const sweeps = await metrics.registry
+      .getSingleMetric('job_cleanup_sweeps_total')
+      ?.get()
+    const ran = sweeps?.values.find((v) => v.labels.outcome === 'ran')
+    expect(ran?.value).toBe(1)
+    expect(logger.warn).toHaveBeenCalledWith(
+      { err: expect.any(Error) as unknown },
+      'reconcile: shedding reconciliation failed',
+    )
+
+    vi.useRealTimers()
+    await handle.close()
+    vi.useFakeTimers()
   })
 })
 
