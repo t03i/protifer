@@ -17,6 +17,9 @@ jobs:
   load-tests:
     name: k6 Load Tests (Production)
     runs-on: ubuntu-latest
+    # Secrets (PROD_GATEWAY_URL, LOAD_TEST_*_BEARER) live in this GitHub Environment,
+    # not at repo scope — the job must declare it to read them.
+    environment: load-testing
     timeout-minutes: 20
 
     steps:
