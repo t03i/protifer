@@ -19,18 +19,17 @@
 
 import http from 'k6/http'
 import { check, sleep } from 'k6'
+import { randomSequence } from './sequences.js'
 
 const BASE_URL = __ENV.PROD_GATEWAY_URL || 'http://localhost:3001'
 const API_KEY = __ENV.LOAD_TEST_PRO_BEARER || ''
 
 // Mixed length profile — small peptides, typical single-chain proteins,
 // and long sequences bracketing the 4096 MAX_SEQUENCE_LENGTH ceiling.
-const SEQUENCES = [
-  'A'.repeat(50), // peptide
-  'A'.repeat(300), // UniProt median-ish
-  'A'.repeat(1024), // large globular
-  'A'.repeat(3500), // near the max
-]
+// Residues are randomised per request (randomSequence): a fixed sequence is a
+// permanent S3 cache hit after its first run, generating zero GPU pressure and
+// making the calibration meaningless. Unique inputs force real inference.
+const SEQUENCE_LENGTHS = [50, 300, 1024, 3500]
 
 export const options = {
   stages: [
@@ -54,7 +53,9 @@ export function setup() {
 }
 
 export default function () {
-  const sequence = SEQUENCES[Math.floor(Math.random() * SEQUENCES.length)]
+  const length =
+    SEQUENCE_LENGTHS[Math.floor(Math.random() * SEQUENCE_LENGTHS.length)]
+  const sequence = randomSequence(length)
   const res = http.post(
     `${BASE_URL}/v1/predictions`,
     JSON.stringify({ sequence }),
