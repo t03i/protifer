@@ -24,3 +24,27 @@ main→ mimirtool rules sync --namespaces protifer → Grafana Cloud Mimir ruler
 
 [`dashboards/`](dashboards/) holds the starter dashboard JSON — import via
 Grafana Cloud → Dashboards → New → Import.
+
+## Worker `/metrics` scrape contract
+
+Each worker (`prediction-worker`, `embedding-worker`) exposes `GET /metrics`
+in Prometheus text format on `METRICS_PORT` (default `9090`), toggled by
+`METRICS_ENABLED`. The monorepo ships these endpoints and this contract only;
+wiring the worker targets into the app-tier Alloy agent's scrape config is a
+**`deploy-app` follow-up handoff** — the deploy repos hand-own scrape config.
+
+Exposed metrics:
+
+- `triton_model_infer_duration_seconds{model,status}` — client-observed
+  per-call latency, including time-to-failure; `status` is `success` or the
+  gRPC error class.
+- `prediction_job_duration_seconds{status}` — per prediction job.
+- `embedding_job_duration_seconds{status}` — per embedding job.
+
+These are **client-side** measurements: they include transport time and
+failed calls. Do not conflate them with Triton's **server-side**
+`nv_inference_*` metrics, which measure pure compute on successful inferences
+only. Use both to attribute latency between the network/queue and the GPU.
+
+Counters and histograms reset on worker restart — query with `rate()` and
+`histogram_quantile()` over a window, not as absolute values.

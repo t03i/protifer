@@ -8,6 +8,7 @@ import type {
 } from '@protifer/shared'
 import {
   computeSequenceHash,
+  createWorkerMetrics,
   embeddingRefKey,
   makeInMemoryStore,
   predictionRefKey,
@@ -186,6 +187,65 @@ describe('processPredictionJob', () => {
     await expect(
       processPredictionJob(makeJob(), { store, triton: makeTriton() }),
     ).rejects.toThrow(/All prediction models failed/)
+  })
+
+  it('records prediction_job_duration with status="success" on the happy path', async () => {
+    const store = makeInMemoryStore(
+      new Map([[embeddingRefKey(EMB_MODEL, SEQ_HASH), EMB_FP16]]),
+    )
+    const outputs: PredictionOutputs = {
+      prott5_secondary_structure: {
+        dssp3: 'C'.repeat(SEQ.length),
+        dssp8: 'C'.repeat(SEQ.length),
+      },
+    }
+    vi.spyOn(dispatchModule, 'dispatchAll').mockResolvedValue({
+      outputs,
+      modelErrors: {} as ModelErrors,
+    })
+
+    const metrics = createWorkerMetrics()
+    await processPredictionJob(makeJob(), {
+      store,
+      triton: makeTriton(),
+      metrics,
+    })
+
+    const text = await metrics.registry.metrics()
+    expect(text).toContain(
+      'prediction_job_duration_seconds_count{status="success"}',
+    )
+  })
+
+  it('records prediction_job_duration with status="failure" when all models fail', async () => {
+    const store = makeInMemoryStore(
+      new Map([[embeddingRefKey(EMB_MODEL, SEQ_HASH), EMB_FP16]]),
+    )
+    const modelErrors: ModelErrors = {
+      prott5_secondary_structure: {
+        code: 'UNAVAILABLE',
+        message: 'down',
+        failedAt: new Date().toISOString(),
+      },
+    }
+    vi.spyOn(dispatchModule, 'dispatchAll').mockResolvedValue({
+      outputs: {} as PredictionOutputs,
+      modelErrors,
+    })
+
+    const metrics = createWorkerMetrics()
+    await expect(
+      processPredictionJob(makeJob(), {
+        store,
+        triton: makeTriton(),
+        metrics,
+      }),
+    ).rejects.toThrow(/All prediction models failed/)
+
+    const text = await metrics.registry.metrics()
+    expect(text).toContain(
+      'prediction_job_duration_seconds_count{status="failure"}',
+    )
   })
 
   it('throws when the stored embedding buffer length is not a valid FP16 shape', async () => {

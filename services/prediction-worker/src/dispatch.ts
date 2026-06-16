@@ -3,6 +3,7 @@ import type {
   ModelErrorEntry,
   ModelErrors,
   PredictionOutputs,
+  WorkerMetrics,
 } from '@protifer/shared'
 import { DEFAULT_DEADLINE_MS } from '@protifer/triton-client'
 import type { TritonClient } from '@protifer/triton-client'
@@ -86,18 +87,26 @@ function truncate(s: string): string {
 export async function dispatchAll(
   triton: TritonClient,
   ctx: AdapterContext,
-  { deadlineMs = DEFAULT_DEADLINE_MS }: { deadlineMs?: number } = {},
+  {
+    deadlineMs = DEFAULT_DEADLINE_MS,
+    metrics,
+  }: { deadlineMs?: number; metrics?: WorkerMetrics } = {},
 ): Promise<{ outputs: PredictionOutputs; modelErrors: ModelErrors }> {
   const adapters = Object.values(ADAPTER_REGISTRY) as ModelAdapter[]
 
   const settled = await Promise.allSettled(
     adapters.map(async (adapter) => {
+      const endTimer = metrics?.tritonModelInferDuration.startTimer({
+        model: adapter.modelName,
+      })
       try {
         const req = adapter.buildRequest(ctx)
         const resp = await triton.modelInfer(req, { deadlineMs })
         const decoded = adapter.decodeResponse(resp)
+        endTimer?.({ status: 'success' })
         return { adapter, decoded }
       } catch (err) {
+        endTimer?.({ status: classifyError(err).code })
         // Tagged Error so the outer loop can attribute the failure.
         // Do NOT spread err — info-disclosure mitigation.
         throw new Error('adapter failure', { cause: { adapter, err } })

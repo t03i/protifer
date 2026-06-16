@@ -2,9 +2,11 @@ import {
   QUEUE_NAMES,
   createObjectStoreFromConfig,
   createRedisConnection,
+  createWorkerMetrics,
   defaultPinoOptions,
   initSentry,
   loadConfigOrExit,
+  startMetricsServer,
   sweepFilesystemBudget,
 } from '@protifer/shared'
 import { createTritonClient } from '@protifer/triton-client'
@@ -21,6 +23,14 @@ const config = loadConfigOrExit(loadConfig)
 const logger = pino({ name: 'embedding-worker', ...defaultPinoOptions() })
 const triton = createTritonClient(config.triton.url)
 const store = createObjectStoreFromConfig(config.storage)
+const metrics = createWorkerMetrics()
+
+const metricsServer = config.metrics.enabled
+  ? startMetricsServer({
+      registry: metrics.registry,
+      port: config.metrics.port,
+    })
+  : undefined
 
 let sweepTimer: ReturnType<typeof setInterval> | undefined
 
@@ -47,6 +57,7 @@ if (config.storage.driver === 'filesystem' && config.storage.maxBytes > 0) {
 
 process.on('SIGTERM', () => {
   if (sweepTimer !== undefined) clearInterval(sweepTimer)
+  metricsServer?.close().catch(() => undefined)
 })
 
 createWorkerApp({
@@ -59,6 +70,7 @@ createWorkerApp({
       triton,
       store,
       deadlineMs: config.triton.deadlineMs,
+      metrics,
     })
   },
   triton,
