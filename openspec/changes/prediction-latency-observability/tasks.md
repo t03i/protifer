@@ -36,5 +36,5 @@
 ## 7. Verification
 
 - [x] 7.1 Run repo gates: `bun run typecheck`, `bun run lint`, `bun run format`, `bun run test`, `bun run build`.
-- [ ] 7.2 Local end-to-end: run a load pass, `curl` each worker `/metrics`, confirm per-model (success + failure), per-job, and gateway request-latency series populate with sensible values.
-- [ ] 7.3 Confirm graceful shutdown closes the metrics server without disrupting queue drain.
+- [x] 7.2 Local end-to-end: run a load pass, `curl` each worker `/metrics`, confirm per-model (success + failure), per-job, and gateway request-latency series populate with sensible values.
+- [x] 7.3 Confirm graceful shutdown closes the metrics server without disrupting queue drain.
