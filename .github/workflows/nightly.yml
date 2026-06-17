@@ -9,6 +9,10 @@ on:
         description: 'Also run the shedding calibration scenario (on-demand only — never scheduled; intentionally creates GPU pressure)'
         type: boolean
         default: false
+      include_pipeline:
+        description: 'Also run the end-to-end pipeline scenario (on-demand only — submits unique sequences → real GPU inference + permanent prod S3 entries)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,6 +52,13 @@ jobs:
       - name: Run shedding calibration scenario (on-demand only)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_shedding && !cancelled() }}
         run: k6 run --out json=k6-shedding-summary.json tests/load/shedding.js
+        env:
+          PROD_GATEWAY_URL: ${{ secrets.PROD_GATEWAY_URL }}
+          LOAD_TEST_PRO_BEARER: ${{ secrets.LOAD_TEST_PRO_BEARER }}
+
+      - name: Run end-to-end pipeline scenario (on-demand only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_pipeline && !cancelled() }}
+        run: k6 run --out json=k6-pipeline-summary.json tests/load/pipeline.js
         env:
           PROD_GATEWAY_URL: ${{ secrets.PROD_GATEWAY_URL }}
           LOAD_TEST_PRO_BEARER: ${{ secrets.LOAD_TEST_PRO_BEARER }}
