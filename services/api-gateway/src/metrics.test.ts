@@ -1,7 +1,11 @@
 import { Gauge, Registry } from 'prom-client'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import { createMetrics, startQueueDepthPolling } from './metrics.ts'
+import {
+  createMetrics,
+  startQueueDepthPolling,
+  startSheddingStatePolling,
+} from './metrics.ts'
 
 describe('createMetrics', () => {
   it('returns a registry with all expected metrics', () => {
@@ -135,5 +139,59 @@ describe('startQueueDepthPolling', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+})
+
+describe('startSheddingStatePolling', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('refreshes the shedding gauges from readState each tick', async () => {
+    const m = createMetrics()
+    const readState = vi
+      .fn()
+      .mockResolvedValue({ pendingResidues: 800, residuesPerSecondEwma: 400 })
+
+    const { stop } = startSheddingStatePolling({ readState }, m, 15_000)
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    expect(readState).toHaveBeenCalledOnce()
+    expect((await m.shedingPendingResidues.get()).values[0]?.value).toBe(800)
+    expect((await m.shedingResiduesPerSecond.get()).values[0]?.value).toBe(400)
+    // estimatedWait = pending / ewma = 800 / 400 = 2
+    expect((await m.shedingEstimatedWait.get()).values[0]?.value).toBe(2)
+    stop()
+  })
+
+  it('drives the pending gauge to zero at idle so the leak alert clears', async () => {
+    const m = createMetrics()
+    m.shedingPendingResidues.set(10_000_000) // stale request-time value
+    const readState = vi
+      .fn()
+      .mockResolvedValue({ pendingResidues: 0, residuesPerSecondEwma: 1200 })
+
+    const { stop } = startSheddingStatePolling({ readState }, m, 15_000)
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    expect((await m.shedingPendingResidues.get()).values[0]?.value).toBe(0)
+    expect((await m.shedingEstimatedWait.get()).values[0]?.value).toBe(0)
+    stop()
+  })
+
+  it('swallows transient readState errors and stop() halts polling', async () => {
+    const m = createMetrics()
+    const readState = vi.fn().mockRejectedValue(new Error('Redis blip'))
+
+    const { stop } = startSheddingStatePolling({ readState }, m, 15_000)
+    await expect(vi.advanceTimersByTimeAsync(15_000)).resolves.not.toThrow()
+    expect(readState).toHaveBeenCalledOnce()
+
+    stop()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(readState).toHaveBeenCalledOnce()
   })
 })
