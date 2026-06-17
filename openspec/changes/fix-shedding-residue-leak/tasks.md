@@ -32,5 +32,5 @@
 ## 6. Verification
 
 - [x] 6.1 Run repo gates: `bun run typecheck`, `bun run lint`, `bun run format`, `bun run test`.
-- [ ] 6.2 Run shedding/cleanup integration coverage via `bun run test:int` (stack up) to exercise reconciliation and drain-rate sampling against real Redis/queues.
+- [x] 6.2 Run shedding/cleanup integration coverage via `bun run test:int` (stack up) to exercise reconciliation and drain-rate sampling against real Redis/queues.
 - [ ] 6.3 Manual/load verification: confirm `shedding_pending_residues` returns to zero after a load test drains; `shedding_residues_per_second` reflects realistic aggregate throughput (order-of-`WORKER_CONCURRENCY` above the old single-job value); `shedding_estimated_wait_seconds` tracks observed latency rather than pinning; and the leak-detector alert is green at idle without false-firing under load.

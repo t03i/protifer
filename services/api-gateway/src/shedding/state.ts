@@ -4,9 +4,7 @@ export const PENDING_RESIDUES_KEY = 'shedding:pending_residues'
 export const THROUGHPUT_KEY = 'shedding:throughput_ewma'
 export const EWMA_FIELD = 'value'
 export const EWMA_TIMESTAMP_FIELD = 'last_sample_ms'
-// Monotonic residues admitted at the gateway; feeds the drain-rate sampler.
 export const ADMITTED_RESIDUES_KEY = 'shedding:admitted_residues_total'
-// Prior-sweep snapshot the sampler diffs against to derive departures.
 export const DRAIN_SNAPSHOT_KEY = 'shedding:drain_snapshot'
 
 export interface SheddingStateSnapshot {

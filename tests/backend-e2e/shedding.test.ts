@@ -134,9 +134,9 @@ describe('Request shedding E2E', () => {
         (s) => s.pendingResidues <= 0,
         { timeoutMs: 30_000 },
       )
+      // Throughput EWMA + last-sample timestamp are leader-sweep-driven now
+      // (unit-covered), not written on completion — so not asserted here.
       expect(afterComplete.pendingResidues).toBeLessThanOrEqual(0)
-      expect(afterComplete.lastCompletionTimestampMs).not.toBeNull()
-      expect(afterComplete.residuesPerSecondEwma ?? 0).toBeGreaterThan(0)
     })
 
     it('does not double-count pendingResidues on cache-hit resubmit', async () => {
