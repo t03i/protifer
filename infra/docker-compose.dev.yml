@@ -281,6 +281,8 @@ services:
       context: ..
       dockerfile: services/embedding-worker/Dockerfile
     command: ['bun', '--watch', 'src/index.ts']
+    ports:
+      - '127.0.0.1:9101:9090'
     environment:
       <<: *worker-env
       NODE_ENV: development
@@ -308,6 +310,8 @@ services:
       context: ..
       dockerfile: services/prediction-worker/Dockerfile
     command: ['bun', '--watch', 'src/index.ts']
+    ports:
+      - '127.0.0.1:9102:9090'
     environment:
       <<: *worker-env
       NODE_ENV: development

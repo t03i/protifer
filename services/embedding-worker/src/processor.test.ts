@@ -5,6 +5,7 @@ import type {
 } from '@protifer/shared'
 import {
   computeSequenceHash,
+  createWorkerMetrics,
   embeddingRefKey,
   makeInMemoryStore,
 } from '@protifer/shared'
@@ -255,5 +256,49 @@ describe('processEmbeddingJob', () => {
     expect(modelInferMock).toHaveBeenCalledOnce()
     const stored = await store.get(result.embeddingRef)
     expect(stored.length).toBe(seqLen * 1024 * 2)
+  })
+
+  it('records success metrics for triton infer and the job on the happy path', async () => {
+    const sequence = 'MKTVRQERLK'
+    const store = makeInMemoryStore()
+    const fp16Buf = fp32ArrayToFp16Buffer(
+      new Array(sequence.length * 1024).fill(0.1) as number[],
+    )
+    const { client: triton } = makeTritonRaw(fp16Buf)
+    const metrics = createWorkerMetrics()
+
+    await processEmbeddingJob(makeJob(sequence), { store, triton, metrics })
+
+    const text = await metrics.registry.metrics()
+    expect(text).toMatch(
+      /triton_model_infer_duration_seconds_count\{[^}]*status="success"[^}]*\} 1/,
+    )
+    expect(text).toContain(
+      'embedding_job_duration_seconds_count{status="success"} 1',
+    )
+  })
+
+  it('records the triton failure status and a failed job when modelInfer throws', async () => {
+    const sequence = 'MKTVRQERLK'
+    const store = makeInMemoryStore()
+    const triton = {
+      modelInfer: vi.fn().mockRejectedValue({ code: 14 }),
+      modelReady: vi.fn().mockResolvedValue(true),
+      serverReady: vi.fn(),
+      close: vi.fn(),
+    } as unknown as TritonClient
+    const metrics = createWorkerMetrics()
+
+    await expect(
+      processEmbeddingJob(makeJob(sequence), { store, triton, metrics }),
+    ).rejects.toBeDefined()
+
+    const text = await metrics.registry.metrics()
+    expect(text).toMatch(
+      /triton_model_infer_duration_seconds_count\{[^}]*status="UNAVAILABLE"[^}]*\} 1/,
+    )
+    expect(text).toContain(
+      'embedding_job_duration_seconds_count{status="failure"} 1',
+    )
   })
 })
