@@ -145,6 +145,32 @@ describe('createShedingState', () => {
     expect(snap.residuesPerSecondEwma).toBe(1500)
   })
 
+  it('recordCompletion stamps a liveness timestamp read back by readState', async () => {
+    const state = createShedingState({
+      redis,
+      config: loadSheddingConfig({}),
+      clock: { now: () => 7_000 },
+    })
+    expect((await state.readState()).lastCompletionTimestampMs).toBeNull()
+    await state.recordCompletion()
+    expect((await state.readState()).lastCompletionTimestampMs).toBe(7_000)
+  })
+
+  it('sampleThroughput does not advance the completion liveness timestamp', async () => {
+    let t = 1_000
+    const state = createShedingState({
+      redis,
+      config: loadSheddingConfig({ SHED_ALPHA: '1' }),
+      clock: { now: () => t },
+    })
+    await state.sampleThroughput(0)
+    await state.incrAdmitted(1000)
+    t += 2000
+    await state.sampleThroughput(200) // writes the sampler's last_sample_ms
+    // Staleness liveness is completion-driven; the sweep sample must not feed it.
+    expect((await state.readState()).lastCompletionTimestampMs).toBeNull()
+  })
+
   it('uses the documented Redis keys', async () => {
     const state = createShedingState({
       redis,

@@ -3,9 +3,11 @@ import type { SheddingConfig } from '@protifer/shared'
 export const PENDING_RESIDUES_KEY = 'shedding:pending_residues'
 export const THROUGHPUT_KEY = 'shedding:throughput_ewma'
 export const EWMA_FIELD = 'value'
-export const EWMA_TIMESTAMP_FIELD = 'last_sample_ms'
 export const ADMITTED_RESIDUES_KEY = 'shedding:admitted_residues_total'
 export const DRAIN_SNAPSHOT_KEY = 'shedding:drain_snapshot'
+// Completion-liveness timestamp for the staleness guard — written per terminal
+// event, distinct from the sampler's sweep-cadence `last_sample_ms`.
+export const LAST_COMPLETION_KEY = 'shedding:last_completion_ms'
 
 export interface SheddingStateSnapshot {
   pendingResidues: number
@@ -95,6 +97,13 @@ export function createShedingState(deps: StateDeps) {
     return redis.incrby(ADMITTED_RESIDUES_KEY, residues)
   }
 
+  // Stamp upstream liveness on each terminal event. The staleness guard reads
+  // this — NOT the throughput sampler's `last_sample_ms`, which only refreshes
+  // at sweep cadence and would make staleness false-fire between sweeps.
+  async function recordCompletion(): Promise<void> {
+    await redis.set(LAST_COMPLETION_KEY, String(now()))
+  }
+
   /**
    * Sweep-driven aggregate drain-rate sample. By flow conservation:
    *   departures = max(0, arrivals − Δpending)
@@ -151,17 +160,15 @@ export function createShedingState(deps: StateDeps) {
   }
 
   async function readState(): Promise<SheddingStateSnapshot> {
-    const [pendingRaw, ewmaAndTs] = await Promise.all([
+    const [pendingRaw, ewmaRaw, lastCompletionRaw] = await Promise.all([
       redis.get(PENDING_RESIDUES_KEY),
-      redis.hmget(THROUGHPUT_KEY, EWMA_FIELD, EWMA_TIMESTAMP_FIELD),
+      redis.hget(THROUGHPUT_KEY, EWMA_FIELD),
+      redis.get(LAST_COMPLETION_KEY),
     ])
     const pending = pendingRaw === null ? 0 : Number(pendingRaw)
-    const [ewmaRaw, tsRaw] = ewmaAndTs
     const ewma =
-      ewmaRaw === null || ewmaRaw === undefined
-        ? config.initialResiduesPerSecond
-        : Number(ewmaRaw)
-    const lastTs = tsRaw === null || tsRaw === undefined ? null : Number(tsRaw)
+      ewmaRaw === null ? config.initialResiduesPerSecond : Number(ewmaRaw)
+    const lastTs = lastCompletionRaw === null ? null : Number(lastCompletionRaw)
     return {
       pendingResidues: Number.isFinite(pending) ? pending : 0,
       residuesPerSecondEwma:
@@ -178,6 +185,7 @@ export function createShedingState(deps: StateDeps) {
     decrementPending,
     setPending,
     incrAdmitted,
+    recordCompletion,
     sampleThroughput,
     readState,
   }

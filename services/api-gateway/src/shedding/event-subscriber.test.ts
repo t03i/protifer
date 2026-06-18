@@ -189,6 +189,35 @@ describe('startEventSubscriber', () => {
     await sub.close()
   })
 
+  it('on completed: stamps the completion liveness timestamp', async () => {
+    const job = makeJob({ sequence: 'AAAA' })
+    const queue = {
+      getJob: vi.fn().mockResolvedValue(job),
+    } as unknown as Parameters<typeof startEventSubscriber>[0]['embeddingQueue']
+
+    const state = createShedingState({ redis, config: loadSheddingConfig({}) })
+    const events = makeFakeEvents()
+    const sub = startEventSubscriber({
+      redis,
+      connection: {} as never,
+      embeddingQueue: queue,
+      state,
+      logger: mockLogger,
+      instanceId: 'only',
+      lockTtlMs: 5_000,
+      renewIntervalMs: 1_000_000,
+      queueEventsFactory: () => events,
+    })
+    await new Promise((r) => setTimeout(r, 30))
+    expect((await state.readState()).lastCompletionTimestampMs).toBeNull()
+
+    events.emit('completed', { jobId: 'j1' })
+    await new Promise((r) => setTimeout(r, 20))
+    expect((await state.readState()).lastCompletionTimestampMs).not.toBeNull()
+
+    await sub.close()
+  })
+
   it('sweep reconciliation overrides accumulated event drift', async () => {
     // A missed terminal event leaves the fast-path counter inflated; the
     // leader sweep's setPending recompute overwrites it wholesale.
