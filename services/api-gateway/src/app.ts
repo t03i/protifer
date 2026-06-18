@@ -293,6 +293,11 @@ export function createApp(overrides?: {
   const rateLimitConnection = connection as unknown as Redis
   const submissionRL = createSubmissionRateLimiter({
     connection: rateLimitConnection,
+    submissionsPerMinute: {
+      free: config.rateLimit.submissionsFree,
+      pro: config.rateLimit.submissionsPro,
+      enterprise: config.rateLimit.submissionsEnterprise,
+    },
   })
   const pollRL = createPollRateLimiter({ connection: rateLimitConnection })
 

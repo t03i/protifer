@@ -1,4 +1,4 @@
-import type { Redis } from '@protifer/shared'
+import type { Plan, Redis } from '@protifer/shared'
 import { PLAN_LIMITS } from '@protifer/shared'
 import type { Store } from 'hono-rate-limiter'
 import { rateLimiter } from 'hono-rate-limiter'
@@ -36,13 +36,24 @@ export interface RateLimitDeps {
   connection: Redis
 }
 
-export function createSubmissionRateLimiter({ connection }: RateLimitDeps) {
+export interface SubmissionRateLimitDeps extends RateLimitDeps {
+  /** Per-plan submissions/min ceiling. Defaults to PLAN_LIMITS. */
+  submissionsPerMinute?: Record<Plan, number>
+}
+
+const DEFAULT_SUBMISSIONS_PER_MINUTE: Record<Plan, number> = {
+  free: PLAN_LIMITS.free.submissionsPerMinute,
+  pro: PLAN_LIMITS.pro.submissionsPerMinute,
+  enterprise: PLAN_LIMITS.enterprise.submissionsPerMinute,
+}
+
+export function createSubmissionRateLimiter({
+  connection,
+  submissionsPerMinute = DEFAULT_SUBMISSIONS_PER_MINUTE,
+}: SubmissionRateLimitDeps) {
   return rateLimiter<{ Variables: Variables }>({
     windowMs: 60 * 1000,
-    limit: (c) => {
-      const plan = c.get('auth').plan
-      return PLAN_LIMITS[plan].submissionsPerMinute
-    },
+    limit: (c) => submissionsPerMinute[c.get('auth').plan],
     keyGenerator: (c) => c.get('auth').sub,
     store: makeRedisStore(connection, 'rl:submit:'),
     standardHeaders: 'draft-7',

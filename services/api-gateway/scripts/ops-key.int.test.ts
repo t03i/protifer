@@ -55,11 +55,14 @@ beforeAll(async () => {
   const port = container.getMappedPort(5432)
   databaseUrl = `postgres://${DB_USER}:${DB_PASSWORD}@${host}:${String(port)}/${DB_NAME}`
 
-  // createAuth() reads DATABASE_URL lazily at call time; our runCreate etc.
-  // build their own pg Pool from the same env var.
+  // runCreate/runRotate lazily load ops-key config from process.env (the
+  // narrow auth/cors/database loader), so seed every field that loader reads.
   process.env['DATABASE_URL'] = databaseUrl
   process.env['BETTER_AUTH_SECRET'] = 'test-secret-not-for-production'
   process.env['BETTER_AUTH_BASE_URL'] = 'http://localhost:9090'
+  process.env['GITHUB_CLIENT_ID'] = TEST_ENV['GITHUB_CLIENT_ID']
+  process.env['GITHUB_CLIENT_SECRET'] = TEST_ENV['GITHUB_CLIENT_SECRET']
+  process.env['CORS_ORIGINS'] = TEST_ENV['CORS_ORIGINS']
 
   const migrationPool = new Pool({ connectionString: databaseUrl })
   try {

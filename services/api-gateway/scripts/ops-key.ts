@@ -22,7 +22,7 @@ import pino from 'pino'
 
 import { createAuth } from '../src/auth/index.ts'
 import type { Auth, AuthDeps } from '../src/auth/index.ts'
-import { loadConfig, ProductionConfigError } from '../src/config/index.ts'
+import { loadOpsKeyConfig } from '../src/config/index.ts'
 
 export const MACHINE_USER_DOMAIN = '@protifer.invalid'
 const LABEL_RE = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/
@@ -151,12 +151,9 @@ let cachedAuthDeps: AuthDeps | undefined
 function loadOpsConfig(): { pool: Pool; authDeps: AuthDeps } {
   let cfg
   try {
-    cfg = loadConfig()
+    cfg = loadOpsKeyConfig()
   } catch (err) {
-    if (
-      err instanceof ConfigValidationError ||
-      err instanceof ProductionConfigError
-    ) {
+    if (err instanceof ConfigValidationError) {
       throw new OpsKeyError(err.message)
     }
     throw err

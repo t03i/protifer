@@ -6,6 +6,7 @@ import {
   customSection,
   defineConfig,
   loadSheddingConfig,
+  PLAN_LIMITS,
   secretField,
   zCsv,
 } from '@protifer/shared'
@@ -162,6 +163,28 @@ const storage = {
   }),
 }
 
+const rateLimit = {
+  submissionsFree: configField({
+    envName: 'RATE_LIMIT_SUBMISSIONS_FREE',
+    description:
+      'Submission requests/min ceiling for free plan (rate limiter, distinct from shedding SLOs). Raise in load-test envs to reach the shedding controller.',
+    type: z.coerce.number().int().min(1),
+    default: PLAN_LIMITS.free.submissionsPerMinute,
+  }),
+  submissionsPro: configField({
+    envName: 'RATE_LIMIT_SUBMISSIONS_PRO',
+    description: 'Submission requests/min ceiling for pro plan.',
+    type: z.coerce.number().int().min(1),
+    default: PLAN_LIMITS.pro.submissionsPerMinute,
+  }),
+  submissionsEnterprise: configField({
+    envName: 'RATE_LIMIT_SUBMISSIONS_ENTERPRISE',
+    description: 'Submission requests/min ceiling for enterprise plan.',
+    type: z.coerce.number().int().min(1),
+    default: PLAN_LIMITS.enterprise.submissionsPerMinute,
+  }),
+}
+
 const jobCleanup = {
   reconcileIntervalMs: configField({
     envName: 'JOB_CLEANUP_RECONCILE_INTERVAL_MS',
@@ -300,12 +323,27 @@ export const ConfigSchema = defineConfig({
   redis,
   triton,
   storage,
+  rateLimit,
   jobCleanup,
   models,
   shedding: sheddingSection,
 })
 
 export type Config = ReturnType<typeof ConfigSchema.load>
+
+/**
+ * Narrow loader for the ops-key CLI — it mints/rotates API keys through
+ * better-auth and Postgres only, so it must NOT require the storage/redis/
+ * triton/model config the gateway needs. Loading just these sections keeps the
+ * operator's required env (and secret surface) minimal.
+ */
+export const OpsKeyConfigSchema = defineConfig({ auth, cors, database })
+
+export function loadOpsKeyConfig(
+  envIn: NodeJS.ProcessEnv = process.env,
+): ReturnType<typeof OpsKeyConfigSchema.load> {
+  return OpsKeyConfigSchema.load(envIn)
+}
 
 export class ProductionConfigError extends Error {
   constructor(public readonly issues: string[]) {

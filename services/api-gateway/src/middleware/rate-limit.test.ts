@@ -129,6 +129,18 @@ describe('createSubmissionRateLimiter', () => {
     )
   })
 
+  it('honors a configured per-plan submissions ceiling', async () => {
+    const app = makeAuthApp(
+      'free',
+      createSubmissionRateLimiter({
+        connection,
+        submissionsPerMinute: { free: 999, pro: 60, enterprise: 300 },
+      }),
+    )
+    const res = await app.request('/test')
+    expect(res.headers.get('ratelimit-policy')).toContain('999')
+  })
+
   it('shares counter across two limiter instances on the same connection', async () => {
     const limiterA = createSubmissionRateLimiter({ connection })
     const limiterB = createSubmissionRateLimiter({ connection })
