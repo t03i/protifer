@@ -145,6 +145,7 @@ export async function shutdownE2EHelpers(): Promise<void> {
 
 const SHEDDING_PENDING_KEY = 'shedding:pending_residues'
 const SHEDDING_THROUGHPUT_KEY = 'shedding:throughput_ewma'
+const SHEDDING_LAST_COMPLETION_KEY = 'shedding:last_completion_ms'
 
 function redisClient(): IORedis {
   return new IORedis({
@@ -158,7 +159,11 @@ function redisClient(): IORedis {
 export async function resetSheddingState(): Promise<void> {
   const redis = redisClient()
   try {
-    await redis.del(SHEDDING_PENDING_KEY, SHEDDING_THROUGHPUT_KEY)
+    await redis.del(
+      SHEDDING_PENDING_KEY,
+      SHEDDING_THROUGHPUT_KEY,
+      SHEDDING_LAST_COMPLETION_KEY,
+    )
   } finally {
     redis.disconnect()
   }
@@ -176,7 +181,7 @@ export async function readSheddingRedis(): Promise<SheddingRedisSnapshot> {
     const [pendingRaw, ewmaRaw, tsRaw] = await Promise.all([
       redis.get(SHEDDING_PENDING_KEY),
       redis.hget(SHEDDING_THROUGHPUT_KEY, 'value'),
-      redis.hget(SHEDDING_THROUGHPUT_KEY, 'last_sample_ms'),
+      redis.get(SHEDDING_LAST_COMPLETION_KEY),
     ])
     return {
       pendingResidues: pendingRaw === null ? 0 : Number(pendingRaw),
@@ -198,18 +203,18 @@ export async function seedSheddingState(values: {
     if (values.pendingResidues !== undefined) {
       await redis.set(SHEDDING_PENDING_KEY, String(values.pendingResidues))
     }
-    if (
-      values.residuesPerSecondEwma !== undefined ||
-      values.lastCompletionTimestampMs !== undefined
-    ) {
-      const fields: string[] = []
-      if (values.residuesPerSecondEwma !== undefined) {
-        fields.push('value', String(values.residuesPerSecondEwma))
-      }
-      if (values.lastCompletionTimestampMs !== undefined) {
-        fields.push('last_sample_ms', String(values.lastCompletionTimestampMs))
-      }
-      await redis.hset(SHEDDING_THROUGHPUT_KEY, ...fields)
+    if (values.residuesPerSecondEwma !== undefined) {
+      await redis.hset(
+        SHEDDING_THROUGHPUT_KEY,
+        'value',
+        String(values.residuesPerSecondEwma),
+      )
+    }
+    if (values.lastCompletionTimestampMs !== undefined) {
+      await redis.set(
+        SHEDDING_LAST_COMPLETION_KEY,
+        String(values.lastCompletionTimestampMs),
+      )
     }
   } finally {
     redis.disconnect()
