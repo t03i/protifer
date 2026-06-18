@@ -41,19 +41,18 @@ export interface SubmissionRateLimitDeps extends RateLimitDeps {
   submissionsPerMinute?: Record<Plan, number>
 }
 
-const DEFAULT_SUBMISSIONS_PER_MINUTE: Record<Plan, number> = {
-  free: PLAN_LIMITS.free.submissionsPerMinute,
-  pro: PLAN_LIMITS.pro.submissionsPerMinute,
-  enterprise: PLAN_LIMITS.enterprise.submissionsPerMinute,
-}
-
 export function createSubmissionRateLimiter({
   connection,
-  submissionsPerMinute = DEFAULT_SUBMISSIONS_PER_MINUTE,
+  submissionsPerMinute,
 }: SubmissionRateLimitDeps) {
   return rateLimiter<{ Variables: Variables }>({
     windowMs: 60 * 1000,
-    limit: (c) => submissionsPerMinute[c.get('auth').plan],
+    limit: (c) => {
+      const plan = c.get('auth').plan
+      return (
+        submissionsPerMinute?.[plan] ?? PLAN_LIMITS[plan].submissionsPerMinute
+      )
+    },
     keyGenerator: (c) => c.get('auth').sub,
     store: makeRedisStore(connection, 'rl:submit:'),
     standardHeaders: 'draft-7',

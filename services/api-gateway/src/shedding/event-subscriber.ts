@@ -83,8 +83,11 @@ export function startEventSubscriber(
   async function handleTerminal(jobId: string): Promise<void> {
     if (!leader) return
     try {
-      await state.recordCompletion()
-      const job = await embeddingQueue.getJob(jobId)
+      // Independent ops — stamp liveness while the job is fetched (one fewer RTT).
+      const [, job] = await Promise.all([
+        state.recordCompletion(),
+        embeddingQueue.getJob(jobId),
+      ])
       if (!job) return
       const data = job.data as EmbeddingJobData | undefined
       const residues = data?.sequence.length ?? 0
