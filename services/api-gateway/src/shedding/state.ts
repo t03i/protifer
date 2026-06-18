@@ -5,8 +5,6 @@ export const THROUGHPUT_KEY = 'shedding:throughput_ewma'
 export const EWMA_FIELD = 'value'
 export const ADMITTED_RESIDUES_KEY = 'shedding:admitted_residues_total'
 export const DRAIN_SNAPSHOT_KEY = 'shedding:drain_snapshot'
-// Completion-liveness timestamp for the staleness guard — written per terminal
-// event, distinct from the sampler's sweep-cadence `last_sample_ms`.
 export const LAST_COMPLETION_KEY = 'shedding:last_completion_ms'
 
 export interface SheddingStateSnapshot {
