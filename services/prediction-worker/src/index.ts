@@ -2,9 +2,11 @@ import {
   QUEUE_NAMES,
   createObjectStoreFromConfig,
   createRedisConnection,
+  createWorkerMetrics,
   defaultPinoOptions,
   initSentry,
   loadConfigOrExit,
+  startMetricsServer,
 } from '@protifer/shared'
 import { createTritonClient } from '@protifer/triton-client'
 import { createWorkerApp } from '@protifer/worker-bootstrap'
@@ -21,6 +23,17 @@ const config = loadConfigOrExit(loadConfig)
 const logger = pino({ name: 'prediction-worker', ...defaultPinoOptions() })
 const triton = createTritonClient(config.triton.url)
 const store = createObjectStoreFromConfig(config.storage)
+const metrics = createWorkerMetrics()
+
+if (config.metrics.enabled) {
+  const metricsServer = startMetricsServer({
+    registry: metrics.registry,
+    port: config.metrics.port,
+  })
+  process.on('SIGTERM', () => {
+    void metricsServer.close()
+  })
+}
 
 createWorkerApp({
   name: 'prediction-worker',
@@ -32,6 +45,7 @@ createWorkerApp({
       triton,
       store,
       deadlineMs: config.triton.deadlineMs,
+      metrics,
     })
   },
   triton,

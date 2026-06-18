@@ -1,4 +1,9 @@
-import { configField, defineConfig, secretField } from '@protifer/shared'
+import {
+  configField,
+  defineConfig,
+  secretField,
+  zBooleanString,
+} from '@protifer/shared'
 import { z } from 'zod'
 
 export const ConfigSchema = defineConfig({
@@ -84,6 +89,20 @@ export const ConfigSchema = defineConfig({
       description: 'Interval between filesystem eviction sweeps.',
       type: z.coerce.number().int().positive(),
       default: 300_000,
+    }),
+  },
+  metrics: {
+    port: configField({
+      envName: 'METRICS_PORT',
+      description: 'Port for the Prometheus /metrics endpoint.',
+      type: z.coerce.number().int().min(1).max(65535),
+      default: 9090,
+    }),
+    enabled: configField({
+      envName: 'METRICS_ENABLED',
+      description: 'Whether to serve the Prometheus /metrics endpoint.',
+      type: zBooleanString,
+      default: true,
     }),
   },
 })

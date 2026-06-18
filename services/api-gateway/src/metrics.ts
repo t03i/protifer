@@ -155,7 +155,7 @@ export function createMetrics(): AppMetrics {
 
   const bullmqJobTotalDuration = new Histogram({
     name: 'bullmq_job_total_duration_seconds',
-    help: 'End-to-end job duration as the user experiences it (finishedOn − timestamp).',
+    help: 'End-to-end request latency (finishedOn − timestamp): for queue="prediction" the full prediction request incl. time waiting on the embedding child (waiting-children) plus model fan-out, for queue="embedding" the embedding request latency.',
     labelNames: ['queue'] as const,
     buckets: JOB_DURATION_BUCKETS,
     registers: [registry],

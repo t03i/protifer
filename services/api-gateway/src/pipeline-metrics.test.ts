@@ -102,6 +102,51 @@ describe('attachPipelineMetrics', () => {
     expect(await histogramSum('bullmq_job_total_duration_seconds')).toBe(90)
   })
 
+  it('prediction-parent total spans the waiting-children gap, not just worker processing', async () => {
+    // Parent created at submission (timestamp), sat in waiting-children until the
+    // embedding child finished, then ran fan-out (processedOn) to completion.
+    getJob.mockResolvedValue({
+      timestamp: 1_000,
+      processedOn: 121_000, // 120s waiting on the embedding child
+      finishedOn: 151_000, // 30s of model fan-out
+      attemptsMade: 1,
+    })
+
+    events.emit('completed', { jobId: 'parent' })
+    await flush()
+
+    const total = await histogramSum('bullmq_job_total_duration_seconds')
+    const processing = await histogramSum(
+      'bullmq_job_processing_duration_seconds',
+    )
+    // total = finishedOn − timestamp = full prediction request latency
+    expect(total).toBe(150)
+    // processing = finishedOn − processedOn = worker-only fan-out
+    expect(processing).toBe(30)
+    // request latency includes the embedding-child wait that processing omits
+    expect((total as number) - (processing as number)).toBe(120)
+  })
+
+  it('request latency minus worker processing is positive when a job waited', async () => {
+    getJob.mockResolvedValue({
+      timestamp: 0,
+      processedOn: 45_000, // 45s queued/waiting-children
+      finishedOn: 60_000, // 15s processing
+      attemptsMade: 1,
+    })
+
+    events.emit('completed', { jobId: 'waited' })
+    await flush()
+
+    const total = await histogramSum('bullmq_job_total_duration_seconds')
+    const processing = await histogramSum(
+      'bullmq_job_processing_duration_seconds',
+    )
+    // Wait time is attributable by subtraction (total − processing > 0).
+    expect((total as number) - (processing as number)).toBeGreaterThan(0)
+    expect((total as number) - (processing as number)).toBe(45)
+  })
+
   it('completed job observes attempts and counts retries beyond the first', async () => {
     getJob.mockResolvedValue({
       timestamp: 0,
@@ -211,6 +256,49 @@ describe('attachPipelineMetrics', () => {
       await histogramSum('bullmq_job_total_duration_seconds'),
     ).toBeUndefined()
     expect(await histogramSum('bullmq_job_attempts')).toBe(1)
+  })
+})
+
+describe('attachPipelineMetrics — embedding queue', () => {
+  let metrics: ReturnType<typeof createMetrics>
+  let events: EventEmitter
+  let getJob: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    metrics = createMetrics()
+    events = new EventEmitter()
+    getJob = vi.fn()
+    attachPipelineMetrics({
+      events,
+      queue: { name: 'embedding', getJob },
+      metrics,
+    })
+  })
+
+  async function flush() {
+    await new Promise((r) => setTimeout(r, 0))
+  }
+
+  async function histogramSum(name: string) {
+    const metric = await metrics.registry.getSingleMetric(name)?.get()
+    const sum = metric?.values.find(
+      (v) => v.metricName === `${name}_sum` && v.labels.queue === 'embedding',
+    )
+    return sum?.value
+  }
+
+  it('embedding total equals finishedOn − timestamp (embedding request latency)', async () => {
+    getJob.mockResolvedValue({
+      timestamp: 2_000,
+      processedOn: 5_000,
+      finishedOn: 22_000,
+      attemptsMade: 1,
+    })
+
+    events.emit('completed', { jobId: 'emb' })
+    await flush()
+
+    expect(await histogramSum('bullmq_job_total_duration_seconds')).toBe(20)
   })
 })
 

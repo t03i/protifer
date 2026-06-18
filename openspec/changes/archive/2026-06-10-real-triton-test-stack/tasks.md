@@ -102,7 +102,7 @@ python` (needs full `-py3` + `-py3-min` at compose time). Per NVIDIA compose doc
 
 ## 6. Prove it, then remove the mock (ordering matters)
 
-- [ ] 6.1 Local: `docker compose -f infra/docker-compose.dev.yml --profile … up`
+- [x] 6.1 Local: `docker compose -f infra/docker-compose.dev.yml --profile … up`
       with the stub — all active models report READY; a real submission flows
       browser/worker → gateway → stub and returns zero-valued results of the
       **right shape/dtype**.
@@ -113,27 +113,27 @@ python` (needs full `-py3` + `-py3-min` at compose time). Per NVIDIA compose doc
       **Audit:** `makePredictionOutputs` + mock value-crafting are consumed ONLY by
       `infra/mock-triton/server.ts` and `mock-server.test.ts` (both deleted in 6.4/6.5)
       — zero external value-dependence. All crafted-value assertions (e.g. `dssp3 ===
-    'HECH'`) already live in surface-#1 adapter tests with hand-built responses
+'HECH'`) already live in surface-#1 adapter tests with hand-built responses
       (`adapters/*.test.ts`), untouched. The only stub-semantics-dependent E2E
       assertion was `pipeline.test.ts` `dssp3 toHaveLength(seqLen)` — against zero
       stubs the shape heuristic fills the `-1` dim with the 1024 feature dim, so it
       yielded 1024≠28. Relaxed to a structural non-empty-string check; exact
       per-residue length/content stays owned by `adapters/prott5_sec.test.ts`.
-- [ ] 6.3 Integration suite green against the stub in CI (`bun run test:int` path).
-- [ ] 6.4 Delete `infra/mock-triton/` (Dockerfile, package.json, server.ts).
-- [ ] 6.5 Delete `packages/triton-client/src/mock-server.ts` + its test; drop the
+- [x] 6.3 Integration suite green against the stub in CI (`bun run test:int` path).
+- [x] 6.4 Delete `infra/mock-triton/` (Dockerfile, package.json, server.ts).
+- [x] 6.5 Delete `packages/triton-client/src/mock-server.ts` + its test; drop the
       `startMockTritonServer` export. Keep the fake-`TritonClient` unit double.
-- [ ] 6.6 Remove the now-dead `@protifer/mock-triton` workspace wiring (root
+- [x] 6.6 Remove the now-dead `@protifer/mock-triton` workspace wiring (root
       `package.json` workspaces, turbo, any `bun` scripts).
 
 ## 7. Verify (gate before calling done)
 
-- [ ] 7.1 `bun run typecheck && bun run lint && bun run format && bun run test`.
-- [ ] 7.2 `bun run test:int` green against the stub (real Triton in the loop).
-- [ ] 7.3 Regression check: re-introduce the `b22f755` 1-D shape bug locally and
+- [x] 7.1 `bun run typecheck && bun run lint && bun run format && bun run test`.
+- [x] 7.2 `bun run test:int` green against the stub (real Triton in the loop).
+- [x] 7.3 Regression check: re-introduce the `b22f755` 1-D shape bug locally and
       confirm the **stub rejects it** where the mock accepted it — the proof this
       change does its job.
-- [ ] 7.4 `bun run build`.
+- [x] 7.4 `bun run build`.
 - [ ] 7.5 PR; check CI ~5 min in; confirm the integration job fits the disk budget.
 
 ## Deferred (not this change)

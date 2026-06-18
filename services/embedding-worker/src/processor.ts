@@ -3,8 +3,13 @@ import type {
   EmbeddingJobResult,
   Job,
   ObjectStore,
+  WorkerMetrics,
 } from '@protifer/shared'
-import { UnrecoverableError, embeddingRefKey } from '@protifer/shared'
+import {
+  UnrecoverableError,
+  classifyTritonStatus,
+  embeddingRefKey,
+} from '@protifer/shared'
 import {
   DEFAULT_DEADLINE_MS,
   fp32ArrayToFp16Buffer,
@@ -16,15 +21,32 @@ interface ProcessorDeps {
   store: ObjectStore
   /** gRPC deadline for Triton modelInfer calls (ms). Defaults to DEFAULT_DEADLINE_MS. */
   deadlineMs?: number
+  metrics?: WorkerMetrics
 }
 
 export async function processEmbeddingJob(
   job: Job,
   deps: ProcessorDeps,
 ): Promise<EmbeddingJobResult> {
+  const { metrics } = deps
+  const endJob = metrics?.embeddingJobDuration.startTimer()
+  try {
+    const result = await runEmbeddingJob(job, deps)
+    endJob?.({ status: 'success' })
+    return result
+  } catch (err) {
+    endJob?.({ status: 'failure' })
+    throw err
+  }
+}
+
+async function runEmbeddingJob(
+  job: Job,
+  deps: ProcessorDeps,
+): Promise<EmbeddingJobResult> {
   const { sequence, sequenceHash, embeddingModel } =
     job.data as EmbeddingJobData
-  const { triton, store, deadlineMs = DEFAULT_DEADLINE_MS } = deps
+  const { triton, store, deadlineMs = DEFAULT_DEADLINE_MS, metrics } = deps
 
   const embeddingRef = embeddingRefKey(embeddingModel, sequenceHash)
   if (await store.exists(embeddingRef)) {
@@ -34,23 +56,33 @@ export async function processEmbeddingJob(
 
   await job.updateProgress(10)
 
-  const response = await triton.modelInfer(
-    {
-      model_name: 'prot_t5_pipeline',
-      inputs: [
-        {
-          name: 'sequences',
-          datatype: 'BYTES',
-          // prot_t5_pipeline has max_batch_size > 0, so Triton requires a
-          // leading batch dim: [batch=1, one sequence]. A 1-D [1] is rejected.
-          shape: [1, 1],
-          contents: { bytes_contents: [Buffer.from(sequence, 'utf8')] },
-        },
-      ],
-      outputs: [{ name: 'embeddings' }],
-    },
-    { deadlineMs },
-  )
+  const endInfer = metrics?.tritonModelInferDuration.startTimer({
+    model: 'prot_t5_pipeline',
+  })
+  let response
+  try {
+    response = await triton.modelInfer(
+      {
+        model_name: 'prot_t5_pipeline',
+        inputs: [
+          {
+            name: 'sequences',
+            datatype: 'BYTES',
+            // prot_t5_pipeline has max_batch_size > 0, so Triton requires a
+            // leading batch dim: [batch=1, one sequence]. A 1-D [1] is rejected.
+            shape: [1, 1],
+            contents: { bytes_contents: [Buffer.from(sequence, 'utf8')] },
+          },
+        ],
+        outputs: [{ name: 'embeddings' }],
+      },
+      { deadlineMs },
+    )
+    endInfer?.({ status: 'success' })
+  } catch (err) {
+    endInfer?.({ status: classifyTritonStatus(err) })
+    throw err
+  }
 
   await job.updateProgress(70)
 

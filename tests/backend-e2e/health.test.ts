@@ -9,7 +9,7 @@ describe('Service health verification', () => {
     expect(res.status).toBe(200)
   })
 
-  it('Triton probe route reports ready against mock-triton', async () => {
+  it('Triton probe route reports ready against the Triton stub', async () => {
     const res = await fetch('http://localhost:13001/health/triton')
     expect(res.status).toBe(200)
     const body = (await res.json()) as { status: string }

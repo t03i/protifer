@@ -5,6 +5,7 @@ import type {
   PredictionJobData,
   PredictionJobResult,
   StoredPredictionV2,
+  WorkerMetrics,
 } from '@protifer/shared'
 import { predictionRefKey } from '@protifer/shared'
 import {
@@ -21,6 +22,7 @@ interface ProcessorDeps {
   store: ObjectStore
   /** gRPC deadline for Triton modelInfer calls (ms). Defaults to DEFAULT_DEADLINE_MS. */
   deadlineMs?: number
+  metrics?: WorkerMetrics
 }
 
 export async function processPredictionJob(
@@ -29,7 +31,7 @@ export async function processPredictionJob(
 ): Promise<PredictionJobResult> {
   const { sequence, sequenceHash, embeddingModel, predictionModels } =
     job.data as PredictionJobData
-  const { triton, store, deadlineMs = DEFAULT_DEADLINE_MS } = deps
+  const { triton, store, deadlineMs = DEFAULT_DEADLINE_MS, metrics } = deps
 
   await job.updateProgress(10)
 
@@ -65,8 +67,13 @@ export async function processPredictionJob(
   await job.updateProgress(30)
 
   const ctx: AdapterContext = { embeddingFp32, mask, seqLen, sequence }
+  const endJobTimer = metrics?.predictionJobDuration.startTimer()
   const { outputs, modelErrors } = await dispatchAll(triton, ctx, {
     deadlineMs,
+    metrics,
+  })
+  endJobTimer?.({
+    status: Object.keys(outputs).length === 0 ? 'failure' : 'success',
   })
 
   await job.updateProgress(80)

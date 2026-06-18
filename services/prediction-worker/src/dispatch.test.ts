@@ -1,3 +1,4 @@
+import { createWorkerMetrics } from '@protifer/shared'
 import type { TritonClient, InferResponse } from '@protifer/triton-client'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
@@ -292,6 +293,59 @@ describe('dispatchAll', () => {
 
     expect(Object.keys(outputs).length).toBe(1)
     expect(Object.keys(modelErrors).length).toBe(7)
+  })
+
+  it('records per-model success observation when metrics provided', async () => {
+    const metrics = createWorkerMetrics()
+    const triton = makeTriton()
+    await dispatchAll(triton, CTX, { metrics })
+
+    const text = await metrics.registry.metrics()
+    expect(text).toContain(
+      'triton_model_infer_duration_seconds_count{model="mock_tmbed",status="success"}',
+    )
+  })
+
+  it('records a non-success status for a failing model (code 14 → UNAVAILABLE)', async () => {
+    const behaviors: StubBehavior[] = EIGHT_KEYS.map((_, i) =>
+      i === 1
+        ? { mode: 'throw-grpc' as const, code: 14, message: 'down' }
+        : { mode: 'succeed' as const, result: {} },
+    )
+    fillRegistry(behaviors)
+
+    const metrics = createWorkerMetrics()
+    const triton = makeTriton()
+    await dispatchAll(triton, CTX, { metrics })
+
+    const text = await metrics.registry.metrics()
+    expect(text).toContain(
+      'triton_model_infer_duration_seconds_count{model="mock_tmbed",status="UNAVAILABLE"}',
+    )
+  })
+
+  it('records per-model failure observations when all models fail', async () => {
+    const behaviors: StubBehavior[] = EIGHT_KEYS.map(() => ({
+      mode: 'throw-grpc' as const,
+      code: 14,
+      message: 'down',
+    }))
+    fillRegistry(behaviors)
+
+    const metrics = createWorkerMetrics()
+    const triton = makeTriton()
+    await dispatchAll(triton, CTX, { metrics })
+
+    const text = await metrics.registry.metrics()
+    const failureLines = text
+      .split('\n')
+      .filter(
+        (l) =>
+          l.startsWith('triton_model_infer_duration_seconds_count') &&
+          l.includes('status="UNAVAILABLE"') &&
+          l.endsWith(' 1'),
+      )
+    expect(failureLines.length).toBe(EIGHT_KEYS.length)
   })
 
   it('ShapeError adapter → modelErrors entry has code SHAPE_MISMATCH', async () => {
