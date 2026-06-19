@@ -11,7 +11,17 @@ import { createAuthenticateMiddleware } from '../middleware/auth/index.ts'
 import type { RedisCommands } from '../queue.ts'
 import type { Variables } from '../types/hono.ts'
 
-const proResolver: PlanResolver = { resolve: vi.fn().mockResolvedValue('pro') }
+const proResolver: PlanResolver = {
+  resolve: vi.fn().mockResolvedValue({
+    plan: 'pro' as const,
+    limits: {
+      submissionsPerMinute: 60,
+      maxConcurrentJobs: 10,
+      maxSequenceLength: 4096,
+      sloSeconds: 120,
+    },
+  }),
+}
 
 const mockAuth = {
   api: {

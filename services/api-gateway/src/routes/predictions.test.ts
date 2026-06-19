@@ -12,7 +12,18 @@ import type { RedisCommands } from '../queue.ts'
 import { PredictionPollResponseSchema } from '../schemas/predictions.ts'
 import type { Variables } from '../types/hono.ts'
 
-const proResolver: PlanResolver = { resolve: vi.fn().mockResolvedValue('pro') }
+const proAccount = {
+  plan: 'pro' as const,
+  limits: {
+    submissionsPerMinute: 60,
+    maxConcurrentJobs: 10,
+    maxSequenceLength: 4096,
+    sloSeconds: 120,
+  },
+}
+const proResolver: PlanResolver = {
+  resolve: vi.fn().mockResolvedValue(proAccount),
+}
 
 const mockAuth = {
   api: {
@@ -204,7 +215,7 @@ describe('GET /v1/predictions/:jobId', () => {
       session: {},
       user: { id: 'user-001', email: 'user@example.com' },
     })
-    proResolver.resolve = vi.fn().mockResolvedValue('pro')
+    proResolver.resolve = vi.fn().mockResolvedValue(proAccount)
   })
 
   it('returns 404 when job does not exist', async () => {

@@ -47,13 +47,14 @@ export function createAuthenticateMiddleware({
       if (!user) {
         return c.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401)
       }
-      const plan = await resolver.resolve(user.id, user.email)
+      const { plan, limits } = await resolver.resolve(user.id, user.email)
       const role =
         user.role === 'admin' || user.role === 'user' ? user.role : undefined
       c.set('auth', {
         sub: user.id,
         email: user.email,
         plan,
+        limits,
         method: 'api-key',
         ...(role ? { role } : {}),
       })
@@ -65,12 +66,16 @@ export function createAuthenticateMiddleware({
     if (!session?.user) {
       return c.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401)
     }
-    const plan = await resolver.resolve(session.user.id, session.user.email)
+    const { plan, limits } = await resolver.resolve(
+      session.user.id,
+      session.user.email,
+    )
     const role = (session.user as { role?: string }).role
     c.set('auth', {
       sub: session.user.id,
       email: session.user.email,
       plan,
+      limits,
       method: 'session',
       ...(role === 'admin' || role === 'user' ? { role } : {}),
     })

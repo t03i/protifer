@@ -115,6 +115,15 @@ export function createPredictionsRouter(
     const { sequence, accession } = c.req.valid('json')
     const { embeddingModel, predictionModels } = suite
     const auth = c.get('auth')
+    if (sequence.length > auth.limits.maxSequenceLength) {
+      return c.json(
+        {
+          error: `sequence must be at most ${String(auth.limits.maxSequenceLength)} residues`,
+          code: 'VALIDATION_ERROR',
+        },
+        400,
+      )
+    }
     const sequenceHash = computeSequenceHash(sequence)
     const embJobId = computeEmbeddingJobId(sequence, embeddingModel)
     const predJobId = computePredictionJobId(

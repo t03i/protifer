@@ -1,3 +1,4 @@
+import type { EffectiveLimits } from '@protifer/shared'
 import { Hono } from 'hono'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -6,8 +7,21 @@ import type { Auth } from '../../auth/index.ts'
 import type { UserDirectory, UserRecord } from '../../auth/user-directory.ts'
 import type { Variables } from '../../types/hono.ts'
 
-const freeResolver = { resolve: () => Promise.resolve('free' as const) }
-const proResolver = { resolve: () => Promise.resolve('pro' as const) }
+const limitsFor = (submissionsPerMinute: number): EffectiveLimits => ({
+  submissionsPerMinute,
+  maxConcurrentJobs: 2,
+  maxSequenceLength: 4096,
+  sloSeconds: 30,
+})
+
+const freeResolver = {
+  resolve: () =>
+    Promise.resolve({ plan: 'free' as const, limits: limitsFor(10) }),
+}
+const proResolver = {
+  resolve: () =>
+    Promise.resolve({ plan: 'pro' as const, limits: limitsFor(60) }),
+}
 
 function makeAuth(
   session: { user: { id: string; email: string; role?: string } } | null,

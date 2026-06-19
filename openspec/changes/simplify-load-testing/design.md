@@ -70,6 +70,13 @@ Emit a `submissions_total{route,plan}` (or equivalently-labeled) counter at the 
 - **Why a counter, not just the log line:** the log line is per-event and not aggregable in the metrics pipeline; reconciliation needs a rate-able series next to `bullmq_*`.
 - **Alternative — infer submissions from `http_requests_total{route,status}`:** rejected as the primary signal. HTTP status counts conflate retries, polls, and non-submission routes; an explicit submission counter is unambiguous and plan-labeled.
 
+### Decision 7: The saturation run drives enforce mode and a per-account SLO knob
+
+Shedding defaults to shadow, so `saturate.js` MUST turn enforce on (the `shedding.enforce` flag, effective within the flag cache window, no restart) to exercise the 503 path, assert at least one shed, then revert. The shed threshold is the account's resolved `sloSeconds` (from `per-account-limit-overrides`' `user.limits`), not a static per-plan constant — so the run uses a dedicated saturation account with a tight `sloSeconds` override to trip shedding at low, deterministic load on prod rather than brute-forcing genuine over-cap throughput. This doubles as the configurability proof: flip enforce on → shed, flip off → admit.
+
+- **Alternative — assume prod already runs enforce:** rejected. Prod defaults to shadow; relying on ambient config silently turns the run into a no-op when enforce is off.
+- **Alternative — saturate by raw over-cap throughput only:** rejected for prod. Genuine saturation burns GPU and writes permanent S3; a tight per-account SLO trips the same code path far cheaper and deterministically.
+
 ## Risks / Trade-offs
 
 - **Reads metrics not yet built** → the compute/shed assertions depend on `prediction-latency-observability` and `fix-shedding-residue-leak`. Mitigation: sequence this change after them; land the admission tier + submission counter (both independent) first.
@@ -89,6 +96,6 @@ Rollback: restore `throughput.js` and the old scenario set; the submission count
 
 ## Open Questions
 
-- **Exact pro concurrent-cap value** for sizing `pipeline.js` VUs — read from env with a conservative default; pin once the plan-limits source (`packages/shared/src/plan.ts`) is confirmed during implementation.
+- **Exact pro concurrent-cap value** for sizing `pipeline.js` VUs — _Resolved:_ the cap and SLO are now per-account `EffectiveLimits` (resolved by `per-account-limit-overrides` from `user.limits` over the plan-class default), not a static `PLAN_LIMITS[plan]` constant. `pipeline.js` still reads a VU cap from env (conservative default); `saturate.js` provisions a dedicated account with a `sloSeconds` override as the saturation knob.
 - **`admission.js` structure** — one k6 script with two scenarios (free + pro via `exec`), or keep them as separate VU functions in one file? Default: one file, two scenario functions, to keep the cron a single step.
 - **Submission counter label set** — `{route,plan}` is the proposed minimum; confirm whether `outcome` (accepted/shed/rate-limited) is worth adding here or is already covered by `admitted_residues_total` + `requests_shed_total`. Default: `{route,plan}` only, lean on existing counters for outcomes.

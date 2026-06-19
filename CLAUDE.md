@@ -79,7 +79,8 @@ Workspaces: `packages/*`, `services/*`, `apps/*`, `infra/*`, `tests/*`, `scripts
 
 - better-auth + GitHub OAuth. Middleware enriches Hono context with the user; frontend `AuthProvider` (`apps/web/src/features/auth/context.tsx`) mirrors session state and sends `credentials: 'include'`.
 - Rate limits (submission + poll tiers) defined in `services/api-gateway/src/middleware/rate-limit.ts`; Redis-backed via `hono-rate-limiter`.
-- Per-plan quotas in `packages/shared/src/plan.ts`.
+- `plan` is the scheduling **class** (queue priority + SLO bucket); numeric **quota** is resolved separately. `PlanResolver.resolve` returns `ResolvedAccount = { plan, limits }` where `limits` is `EffectiveLimits` (`submissionsPerMinute`, `maxConcurrentJobs`, `maxSequenceLength`, `sloSeconds`) — class defaults merged with a per-account override from the `user.limits jsonb` column (`mergeLimits` + `OverrideLimitsSchema` in `packages/shared/src/plan.ts`; absent/invalid → class default). Consumers read `auth.limits.*` off the auth context, never `PLAN_LIMITS[plan]` at the call site.
+- Overrides are admin-only: `PUT/DELETE /admin/accounts/{userId}/limits` (`services/api-gateway/src/admin/limits.ts`); never user-editable. PUT is full-replace; DELETE clears to class defaults.
 
 ## Errors
 

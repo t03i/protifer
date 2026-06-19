@@ -67,6 +67,16 @@ export async function deleteTestUser(userId: string): Promise<void> {
   await pool.query('DELETE FROM "user" WHERE id = $1', [userId])
 }
 
+export async function setUserLimits(
+  userId: string,
+  limits: Record<string, number> | null,
+): Promise<void> {
+  await pool.query('UPDATE "user" SET limits = $1::jsonb WHERE id = $2', [
+    limits === null ? null : JSON.stringify(limits),
+    userId,
+  ])
+}
+
 export async function apiRequest(
   method: string,
   path: string,

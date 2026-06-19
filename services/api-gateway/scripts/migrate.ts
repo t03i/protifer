@@ -62,6 +62,20 @@ try {
     END $$;
   `)
   console.log('[migrate] Phase 22: ensured users.role column (D-10).')
+
+  // Per-account quota override (nullable jsonb, no backfill — NULL = plan
+  // class defaults). Idempotent via pg_attribute existence check.
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = '"user"'::regclass AND attname = 'limits' AND NOT attisdropped
+      ) THEN
+        ALTER TABLE "user" ADD COLUMN limits jsonb;
+      END IF;
+    END $$;
+  `)
+  console.log('[migrate] ensured user.limits column.')
 } finally {
   await pool.end()
 }

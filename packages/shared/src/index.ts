@@ -37,11 +37,20 @@ export { sweepFilesystemBudget } from './storage-evict.ts'
 export {
   PLAN_LIMITS,
   MAX_SEQUENCE_LENGTH,
+  MAX_SEQUENCE_LENGTH_CAP,
+  OverrideLimitsSchema,
+  mergeLimits,
   DEFAULT_PLAN_PRIORITY,
   SHEDDING_DEFAULTS,
   loadSheddingConfig,
 } from './plan.ts'
-export type { PlanResolver, SheddingConfig } from './plan.ts'
+export type {
+  PlanResolver,
+  SheddingConfig,
+  EffectiveLimits,
+  ResolvedAccount,
+  LimitsOverride,
+} from './plan.ts'
 export * from './queue.ts'
 // sentry.ts: `_resetSentryForTests` stays internal (tested via direct path).
 export { initSentry } from './sentry.ts'

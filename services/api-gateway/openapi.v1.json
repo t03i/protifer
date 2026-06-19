@@ -33,7 +33,7 @@
           "sequence": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 4096,
+            "maxLength": 16384,
             "example": "MKTVRQERLK"
           },
           "accession": {
@@ -210,7 +210,7 @@
           "sequence": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 4096,
+            "maxLength": 16384,
             "example": "MKTVRQERLK"
           },
           "accession": {

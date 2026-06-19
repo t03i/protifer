@@ -49,12 +49,33 @@ The end-to-end scenario SHALL submit unique sequences and poll each job to a ter
 
 ### Requirement: The saturation scenario is the only shedding/503 coverage
 
-The saturation scenario SHALL drive submissions above sustainable throughput with mixed sequence lengths, tolerate 503 responses, and read `shedding_residues_per_second` for steady-state calibration of the shedding EWMA. It SHALL be the sole scenario that exercises the 503 shed path, and SHALL run on demand only.
+The saturation scenario SHALL drive submissions above sustainable throughput with mixed sequence lengths, tolerate 503 responses during the ramp, and read `shedding_residues_per_second` for steady-state calibration of the shedding EWMA. It SHALL be the sole scenario that exercises the 503 shed path, and SHALL run on demand only.
+
+Because shedding defaults to shadow mode (`SHED_MODE=shadow`), the run SHALL ensure enforce mode is active before asserting the shed path — by setting the `shedding.enforce` flag override (effective within the flag cache window, no restart) — and SHALL revert it on completion. Under sustained over-cap load in enforce mode the run SHALL observe at least one `503` carrying `Retry-After`; a run that produces no `503` SHALL fail rather than pass, so a shadow-mode no-op is never mistaken for shedding coverage.
 
 #### Scenario: Over-cap load surfaces shedding for calibration
 
-- **WHEN** the saturation scenario sustains over-cap load
-- **THEN** 503 responses are tolerated (not counted as failures), real network errors still fail the run, and `shedding_residues_per_second` is readable for calibration during the steady-state window
+- **WHEN** the saturation scenario sustains over-cap load with enforce mode active
+- **THEN** 503 responses are tolerated (not counted as failures) and carry `Retry-After`, real network errors still fail the run, and `shedding_residues_per_second` is readable for calibration during the steady-state window
+
+#### Scenario: A run that never sheds fails
+
+- **WHEN** the saturation run completes without observing any 503 under sustained over-cap enforce-mode load
+- **THEN** the run fails, signalling either that enforce was not active or that the load did not exceed the resolved SLO
+
+### Requirement: Shedding enforcement is runtime-configurable without restart
+
+The shedding control plane SHALL be togglable at runtime: the `shedding.enabled` and `shedding.enforce` flag overrides take effect within the flag cache window with no redeploy, and an account's shed threshold SHALL be the per-account resolved `sloSeconds` (from the `user.limits` override) overlaid on the plan-class default, not a static per-plan constant. The saturation run SHALL exercise this surface: enabling enforce engages shedding and disabling it resumes admission.
+
+#### Scenario: Enforce toggle engages and disengages shedding
+
+- **WHEN** an operator flips `shedding.enforce` on and then off around a saturation run
+- **THEN** over-cap submissions shed (503) while enforce is on and resume admitting (202) within the flag cache window after it is turned off
+
+#### Scenario: Per-account SLO override sets the shed threshold
+
+- **WHEN** the saturation account carries a `sloSeconds` override in `user.limits`
+- **THEN** shedding for that account trips against the override value, allowing a deterministic saturation threshold without changing global config
 
 ### Requirement: Submission accounting is reconcilable end to end
 
