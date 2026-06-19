@@ -25,6 +25,6 @@
 ## 5. Verification
 
 - [x] 5.1 Run repo gates: `bun run typecheck`, `bun run lint`, `bun run format`, `bun run test`.
-- [ ] 5.2 Run `bun run test:int` (stack up) to exercise the bounded fan-out against the mock/real Triton path.
+- [x] 5.2 Run `bun run test:int` (stack up) to exercise the bounded fan-out against the mock/real Triton path.
 - [ ] 5.3 Load verification: on a real load run confirm no `Connection dropped` / `Bandwidth exhausted or memory limit exceeded` storm, the GPU is busy during prediction (not idle), prediction jobs complete, and BullMQ whole-job retries drop sharply.
 - [ ] 5.4 Tune `TRITON_MAX_INFLIGHT_INFERS` upward until Triton is well-utilized without reintroducing transport errors; record the chosen value and rationale (deploy runbook).
