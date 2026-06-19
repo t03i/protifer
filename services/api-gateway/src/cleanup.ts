@@ -4,6 +4,7 @@ import type { Queue } from '@protifer/shared'
 
 import type { JobCleanupMetrics, ReconcileReason } from './metrics.ts'
 import type { RedisCommands } from './queue.ts'
+import type { SheddingState } from './shedding/state.ts'
 
 export const ACTIVE_JOBS_KEY = (userId: string) => `active-jobs:${userId}`
 export const JOB_USER_MAP_KEY = 'job-user-map'
@@ -48,6 +49,11 @@ interface CleanupDeps {
   metrics?: JobCleanupMetrics
   /** Observe-only stale waiting-children scan, run on the leader sweep. */
   staleChildrenScan?: () => Promise<void>
+  /**
+   * Shedding accounting. When provided, the leader sweep reconciles
+   * `pending_residues` from real queue state and samples the drain rate.
+   */
+  sheddingState?: SheddingState
   intervalMs?: number
   lockTtlMs?: number
   instanceId?: string
@@ -178,6 +184,24 @@ export async function runReconcileSweep(deps: SweepDeps): Promise<SweepResult> {
   return { sweptKeys, removedEntries, removedByReason, durationMs }
 }
 
+/**
+ * Sum per-job residues (sequence length) over jobs in `waiting`, `active`,
+ * and `waiting-children` across the given queues. Route-agnostic: a prediction
+ * flow contributes its parent (waiting-children) and its embedding child
+ * (active/waiting), so in-flight work is counted regardless of queue.
+ */
+export async function sumQueueResidues(queues: Queue[]): Promise<number> {
+  let total = 0
+  for (const queue of queues) {
+    const jobs = await queue.getJobs(['waiting', 'active', 'waiting-children'])
+    for (const job of jobs) {
+      const seq = (job.data as { sequence?: string } | undefined)?.sequence
+      if (typeof seq === 'string') total += seq.length
+    }
+  }
+  return total
+}
+
 export function setupJobCleanup(deps: CleanupDeps): CleanupHandle {
   const {
     redis,
@@ -264,6 +288,18 @@ export function setupJobCleanup(deps: CleanupDeps): CleanupHandle {
           await deps.staleChildrenScan()
         } catch (err) {
           logger.warn({ err }, 'reconcile: stale-children scan failed')
+        }
+      }
+      if (deps.sheddingState) {
+        try {
+          const pending = await sumQueueResidues([
+            predictionQueue,
+            embeddingQueue,
+          ])
+          await deps.sheddingState.setPending(pending)
+          await deps.sheddingState.sampleThroughput(pending)
+        } catch (err) {
+          logger.warn({ err }, 'reconcile: shedding reconciliation failed')
         }
       }
     } catch (err) {

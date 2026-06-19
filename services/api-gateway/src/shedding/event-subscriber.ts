@@ -76,29 +76,24 @@ export function startEventSubscriber(
   let events: QueueEventsType | null = null
   let renewTimer: ReturnType<typeof setInterval> | null = null
 
+  // Stamps completion-liveness (for the staleness guard) and applies the
+  // fast-path pending decrement. Throughput is derived from the leader sweep's
+  // drain-rate sampler, so a missed terminal event here self-heals at the next
+  // reconciliation instead of corrupting the estimate.
   async function handleTerminal(jobId: string): Promise<void> {
     if (!leader) return
     try {
-      const job = await embeddingQueue.getJob(jobId)
+      // Independent ops — stamp liveness while the job is fetched (one fewer RTT).
+      const [, job] = await Promise.all([
+        state.recordCompletion(),
+        embeddingQueue.getJob(jobId),
+      ])
       if (!job) return
       const data = job.data as EmbeddingJobData | undefined
       const residues = data?.sequence.length ?? 0
       if (residues <= 0) return
 
-      const finishedOn =
-        (job as unknown as { finishedOn?: number }).finishedOn ?? null
-      const processedOn =
-        (job as unknown as { processedOn?: number }).processedOn ?? null
-      const durationMs =
-        finishedOn !== null && processedOn !== null && finishedOn > processedOn
-          ? finishedOn - processedOn
-          : null
-      const durationSeconds = durationMs !== null ? durationMs / 1000 : null
-
       await state.decrementPending(residues)
-      if (durationSeconds !== null && durationSeconds > 0) {
-        await state.recordCompletion(residues, durationSeconds)
-      }
     } catch (err) {
       logger.warn({ err, jobId }, 'shedding: terminal event handler failed')
     }

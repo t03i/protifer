@@ -1,6 +1,7 @@
 export {
   ConfigSchema,
   loadConfig,
+  loadOpsKeyConfig,
   assertProductionInvariants,
   ProductionConfigError,
   type Config,

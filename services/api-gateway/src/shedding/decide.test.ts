@@ -1,4 +1,5 @@
 import { loadSheddingConfig } from '@protifer/shared'
+import type { Plan } from '@protifer/shared'
 import { describe, it, expect } from 'vitest'
 
 import { decideAdmission } from './decide.ts'
@@ -180,6 +181,55 @@ describe('decideAdmission', () => {
     })
     expect(Number.isInteger(decision.retryAfterSeconds)).toBe(true)
     expect(decision.retryAfterSeconds).toBeGreaterThanOrEqual(0)
+  })
+
+  // Deep, sustained overload — the regime the gateway rate limiter masks from
+  // load tests, so it is covered here at the pure-decision layer instead.
+  describe('deep overload (calibration curve)', () => {
+    const throughput = 1000 // residues/sec
+    const cfg = loadSheddingConfig({
+      SHED_SLO_PRO_SECONDS: '60',
+      SHED_RETRY_JITTER_FRACTION: '0',
+    })
+    const at = (pendingResidues: number, plan: Plan, c = cfg) =>
+      decideAdmission({
+        state: {
+          pendingResidues,
+          residuesPerSecondEwma: throughput,
+          lastCompletionTimestampMs: 1_000_000,
+        },
+        config: c,
+        plan,
+        sequenceResidues: 0,
+        nowMs: 1_000_000,
+        jitter: fixedJitter,
+      })
+
+    it('admits exactly at the SLO boundary and sheds just past it', () => {
+      // wait = pending / throughput; SLO 60s → boundary at 60_000 residues
+      expect(at(60_000, 'pro').admit).toBe(true) // 60s == SLO, not > SLO
+      const past = at(60_001, 'pro')
+      expect(past.admit).toBe(false)
+      expect(past.code).toBe('OVERLOADED')
+    })
+
+    it('retry-after grows with the depth of overload', () => {
+      const [shallow, mid, deep] = [120_000, 600_000, 3_000_000].map(
+        (p) => at(p, 'pro').retryAfterSeconds ?? 0,
+      )
+      expect(shallow).toBe(120) // jitter off → ceil(estimated wait)
+      expect(shallow).toBeLessThan(mid ?? 0)
+      expect(mid).toBeLessThan(deep ?? 0)
+    })
+
+    it('sustained deep overload still admits enterprise (SLO=0) while shedding pro', () => {
+      const c = loadSheddingConfig({
+        SHED_SLO_ENTERPRISE_SECONDS: '0',
+        SHED_SLO_PRO_SECONDS: '60',
+      })
+      expect(at(10_000_000, 'enterprise', c).admit).toBe(true)
+      expect(at(10_000_000, 'pro', c).admit).toBe(false)
+    })
   })
 
   it('estimated wait uses initial throughput when EWMA is 0', () => {

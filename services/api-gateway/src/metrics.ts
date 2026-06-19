@@ -120,13 +120,13 @@ export function createMetrics(): AppMetrics {
 
   const shedingResiduesPerSecond = new Gauge({
     name: 'shedding_residues_per_second',
-    help: 'Current EWMA of embedding throughput (residues per second).',
+    help: 'Current EWMA of aggregate pipeline drain rate (residues per second) across both queues.',
     registers: [registry],
   })
 
   const shedingPendingResidues = new Gauge({
     name: 'shedding_pending_residues',
-    help: 'Current pending-residues counter tracking in-flight embedding work.',
+    help: 'Current pending-residues across both queues (waiting + active + waiting-children), reconciled by the leader sweep.',
     registers: [registry],
   })
 
@@ -251,6 +251,55 @@ export function startQueueDepthPolling(
       } catch {
         // transient Redis blip — skip this tick
       }
+    }
+  }
+
+  const timer = setInterval(() => {
+    void poll()
+  }, intervalMs)
+  if (typeof (timer as { unref?: () => void }).unref === 'function') {
+    ;(timer as { unref: () => void }).unref()
+  }
+
+  return {
+    stop: () => {
+      clearInterval(timer)
+    },
+  }
+}
+
+interface SheddingStateReader {
+  readState: () => Promise<{
+    pendingResidues: number
+    residuesPerSecondEwma: number
+  }>
+}
+
+interface SheddingGauges {
+  shedingPendingResidues: Gauge
+  shedingResiduesPerSecond: Gauge
+  shedingEstimatedWait: Gauge
+}
+
+// The shedding gauges are otherwise only written by the request middleware, so
+// at idle they freeze at their last request-time value — which would make the
+// pending-residue leak alert fire on stale data. Refresh them per-instance from
+// the reconciled Redis state on a timer, mirroring queue-depth polling.
+export function startSheddingStatePolling(
+  state: SheddingStateReader,
+  gauges: SheddingGauges,
+  intervalMs = 15_000,
+): { stop: () => void } {
+  async function poll() {
+    try {
+      const snap = await state.readState()
+      const throughput =
+        snap.residuesPerSecondEwma > 0 ? snap.residuesPerSecondEwma : 1
+      gauges.shedingPendingResidues.set(snap.pendingResidues)
+      gauges.shedingResiduesPerSecond.set(snap.residuesPerSecondEwma)
+      gauges.shedingEstimatedWait.set(snap.pendingResidues / throughput)
+    } catch {
+      // transient Redis blip — skip this tick
     }
   }
 

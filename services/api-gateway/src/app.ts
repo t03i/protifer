@@ -48,7 +48,11 @@ import {
   createPrometheusFlagHook,
   createSentryFlagHook,
 } from './flags/hooks.ts'
-import { createMetrics, startQueueDepthPolling } from './metrics.ts'
+import {
+  createMetrics,
+  startQueueDepthPolling,
+  startSheddingStatePolling,
+} from './metrics.ts'
 import { createAdminRoleMiddleware } from './middleware/admin-role.ts'
 import { createAuthenticateMiddleware } from './middleware/auth/index.ts'
 import { createMetricsMiddleware } from './middleware/metrics.ts'
@@ -223,6 +227,8 @@ export function createApp(overrides?: {
     metrics.bullmqQueueJobs,
   )
 
+  const sheddingStatePoller = startSheddingStatePolling(sheddingState, metrics)
+
   // Shared QueueEvents instances — job cleanup and pipeline metrics both
   // listen; the app owns their lifecycle (closed in `close()`).
   const predictionQueueEvents = new QueueEvents(QUEUE_NAMES.PREDICTION, {
@@ -261,6 +267,7 @@ export function createApp(overrides?: {
       metrics,
       thresholdMs: config.jobCleanup.staleChildrenThresholdMs,
     }),
+    sheddingState,
     intervalMs: config.jobCleanup.reconcileIntervalMs,
     lockTtlMs: config.jobCleanup.lockTtlMs,
   })
@@ -286,6 +293,11 @@ export function createApp(overrides?: {
   const rateLimitConnection = connection as unknown as Redis
   const submissionRL = createSubmissionRateLimiter({
     connection: rateLimitConnection,
+    submissionsPerMinute: {
+      free: config.rateLimit.submissionsFree,
+      pro: config.rateLimit.submissionsPro,
+      enterprise: config.rateLimit.submissionsEnterprise,
+    },
   })
   const pollRL = createPollRateLimiter({ connection: rateLimitConnection })
 
@@ -608,6 +620,7 @@ fetch('/api/auth/sign-in/social',{method:'POST',credentials:'include',headers:{'
     // connections, then DB pools last (BullMQ and HTTP may still use them
     // during drain).
     queueDepthPoller.stop()
+    sheddingStatePoller.stop()
     await sheddingEventHandle.close()
     await cleanupHandle.close()
     await predictionQueueEvents.close()

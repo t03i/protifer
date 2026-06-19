@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest'
 import {
   ConfigSchema,
   loadConfig,
+  loadOpsKeyConfig,
   ProductionConfigError,
   assertProductionInvariants,
 } from './schema.ts'
@@ -154,6 +155,19 @@ describe('loadConfig', () => {
     }).not.toThrow()
   })
 
+  it('rate-limit submission ceilings default to PLAN_LIMITS and are env-overridable', () => {
+    const def = loadConfig(VALID_ENV)
+    expect(def.rateLimit.submissionsFree).toBe(10)
+    expect(def.rateLimit.submissionsPro).toBe(60)
+
+    const over = loadConfig({
+      ...VALID_ENV,
+      RATE_LIMIT_SUBMISSIONS_PRO: '5000',
+    })
+    expect(over.rateLimit.submissionsPro).toBe(5000)
+    expect(over.rateLimit.submissionsFree).toBe(10)
+  })
+
   it('describes every field with kind metadata', () => {
     const docs = ConfigSchema.describe()
     expect(docs.length).toBeGreaterThan(15)
@@ -162,5 +176,30 @@ describe('loadConfig', () => {
     const port = docs.find((d) => d.envName === 'PORT')
     expect(port?.kind).toBe('config')
     expect(port?.hasDefault).toBe(true)
+  })
+})
+
+describe('loadOpsKeyConfig', () => {
+  const OPS_ENV = {
+    BETTER_AUTH_SECRET: '0123456789abcdef',
+    BETTER_AUTH_BASE_URL: 'http://localhost:9090',
+    GITHUB_CLIENT_ID: 'gh-id',
+    GITHUB_CLIENT_SECRET: 'gh-secret',
+    CORS_ORIGINS: 'http://localhost:5173',
+    DATABASE_URL: 'postgresql://localhost:5432/db',
+  }
+
+  it('loads auth/cors/database without the gateway infra config', () => {
+    // No GARAGE_*/REDIS_*/TRITON_* — ops-key must not require them.
+    const cfg = loadOpsKeyConfig(OPS_ENV)
+    expect(cfg.database.url).toBe('postgresql://localhost:5432/db')
+    expect(cfg.auth.githubClientId).toBe('gh-id')
+    expect(cfg.cors.origins).toEqual(['http://localhost:5173'])
+  })
+
+  it('still reports missing auth fields', () => {
+    expect(() =>
+      loadOpsKeyConfig({ DATABASE_URL: 'postgresql://x/y' }),
+    ).toThrow(ConfigValidationError)
   })
 })

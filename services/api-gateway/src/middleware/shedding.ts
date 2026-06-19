@@ -180,6 +180,7 @@ export function createSheddingMiddleware(deps: SheddingMiddlewareDeps) {
       // shadow mode: admit despite decision
       try {
         await state.incrementPending(residues)
+        await state.incrAdmitted(residues)
       } catch (err) {
         logger.warn({ err }, 'shedding: incrementPending failed (shadow)')
       }
@@ -193,6 +194,7 @@ export function createSheddingMiddleware(deps: SheddingMiddlewareDeps) {
     )
     try {
       await state.incrementPending(residues)
+      await state.incrAdmitted(residues)
     } catch (err) {
       logger.warn({ err }, 'shedding: incrementPending failed')
     }
