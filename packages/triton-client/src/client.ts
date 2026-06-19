@@ -17,6 +17,43 @@ export const TRITON_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 
 export const DEFAULT_DEADLINE_MS = 60_000
 
+export const DEFAULT_RETRY_MAX_ATTEMPTS = 3
+export const DEFAULT_RETRY_BASE_BACKOFF_MS = 100
+
+const TRANSIENT_INTERNAL_RE =
+  /bandwidth exhausted|memory limit exceeded|failed parsing|connection|rst_stream|stream reset/i
+
+function isTransientTransportError(err: unknown): boolean {
+  if (err instanceof TritonTimeoutError) return false
+  if (
+    err !== null &&
+    typeof err === 'object' &&
+    'code' in err &&
+    typeof (err as { code: unknown }).code === 'number'
+  ) {
+    const code = (err as { code: number }).code
+    if (code === (grpc.status.UNAVAILABLE as number)) return true
+    if (code === (grpc.status.INTERNAL as number)) {
+      const detail = (
+        (err as { details?: string }).details ??
+        (err as { message?: string }).message ??
+        ''
+      ).toLowerCase()
+      return TRANSIENT_INTERNAL_RE.test(detail)
+    }
+  }
+  return false
+}
+
+function retryBackoffMs(baseBackoffMs: number, attempt: number): number {
+  const exp = baseBackoffMs * 2 ** (attempt - 1)
+  return Math.round(exp / 2 + Math.random() * (exp / 2))
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 /**
  * Thrown when a gRPC call to Triton exceeds the configured deadline.
  * Maps to gRPC status code 4 (DEADLINE_EXCEEDED).
@@ -67,9 +104,17 @@ export interface InferResponse {
   raw_output_contents: Buffer[]
 }
 
+export interface ModelInferRetryOptions {
+  /** Total attempts including the first. Values ≤1 disable retry. */
+  maxAttempts: number
+  baseBackoffMs: number
+}
+
 export interface ModelInferOptions {
   /** Milliseconds before the gRPC call is cancelled. Defaults to DEFAULT_DEADLINE_MS (60 000). */
   deadlineMs?: number
+  /** Bounded jittered retry on transient transport errors. Defaults to the DEFAULT_RETRY_* constants. */
+  retry?: ModelInferRetryOptions
 }
 
 export interface TritonClient {
@@ -127,37 +172,63 @@ export function createTritonClient(url: string): TritonClient {
       'grpc.enable_retries': 0,
       'grpc.max_receive_message_length': TRITON_MAX_MESSAGE_BYTES,
       'grpc.max_send_message_length': TRITON_MAX_MESSAGE_BYTES,
+      // Keepalive pings only while calls are in flight (permit_without_calls: 0)
+      // so a half-open connection is detected mid-burst without tripping Triton's
+      // server-side min-ping-interval enforcement (ENHANCE_YOUR_CALM).
+      'grpc.keepalive_time_ms': 30_000,
+      'grpc.keepalive_timeout_ms': 10_000,
+      'grpc.keepalive_permit_without_calls': 0,
     },
   )
 
-  return {
-    modelInfer(
-      request: InferRequest,
-      { deadlineMs = DEFAULT_DEADLINE_MS }: ModelInferOptions = {},
-    ): Promise<InferResponse> {
-      return new Promise((resolve, reject) => {
-        const deadline = new Date(Date.now() + deadlineMs)
-        stub.modelInfer(
-          request,
-          { deadline },
-          (err: grpc.ServiceError | null, response: InferResponse) => {
-            if (err) {
-              if (err.code === grpc.status.DEADLINE_EXCEEDED) {
-                reject(
-                  new TritonTimeoutError(
-                    `Triton modelInfer timed out after ${deadlineMs.toString()} ms`,
-                    deadlineMs,
-                  ),
-                )
-              } else {
-                reject(err)
-              }
+  function callOnce(
+    request: InferRequest,
+    deadlineMs: number,
+  ): Promise<InferResponse> {
+    return new Promise((resolve, reject) => {
+      const deadline = new Date(Date.now() + deadlineMs)
+      stub.modelInfer(
+        request,
+        { deadline },
+        (err: grpc.ServiceError | null, response: InferResponse) => {
+          if (err) {
+            if (err.code === grpc.status.DEADLINE_EXCEEDED) {
+              reject(
+                new TritonTimeoutError(
+                  `Triton modelInfer timed out after ${deadlineMs.toString()} ms`,
+                  deadlineMs,
+                ),
+              )
             } else {
-              resolve(response)
+              reject(err)
             }
-          },
-        )
-      })
+          } else {
+            resolve(response)
+          }
+        },
+      )
+    })
+  }
+
+  return {
+    async modelInfer(
+      request: InferRequest,
+      { deadlineMs = DEFAULT_DEADLINE_MS, retry }: ModelInferOptions = {},
+    ): Promise<InferResponse> {
+      const maxAttempts = retry?.maxAttempts ?? DEFAULT_RETRY_MAX_ATTEMPTS
+      const baseBackoffMs =
+        retry?.baseBackoffMs ?? DEFAULT_RETRY_BASE_BACKOFF_MS
+      let attempt = 0
+      for (;;) {
+        attempt++
+        try {
+          return await callOnce(request, deadlineMs)
+        } catch (err) {
+          if (attempt >= maxAttempts || !isTransientTransportError(err))
+            throw err
+          await sleep(retryBackoffMs(baseBackoffMs, attempt))
+        }
+      }
     },
 
     serverReady(): Promise<boolean> {

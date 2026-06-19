@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ShapeError, DtypeError, DecodeError } from './adapters/errors.ts'
 import type { AdapterContext } from './adapters/types.ts'
 import { classifyError, dispatchAll } from './dispatch.ts'
+import { createSemaphore } from './semaphore.ts'
 
 type StubBehavior =
   | { mode: 'succeed'; result: unknown }
@@ -75,6 +76,48 @@ const CTX: AdapterContext = {
   mask: new Float32Array(10).fill(1),
   seqLen: 10,
   sequence: 'MKTVRQERLK',
+}
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+/** Triton stub whose modelInfer blocks until explicitly released, tracking concurrency. */
+function makeGatedTriton() {
+  let inFlight = 0
+  let maxInFlight = 0
+  const pending: Array<() => void> = []
+  const modelInfer = vi.fn().mockImplementation(
+    () =>
+      new Promise<InferResponse>((resolve) => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        pending.push(() => {
+          inFlight--
+          resolve({ model_name: '', outputs: [], raw_output_contents: [] })
+        })
+      }),
+  )
+  const triton = {
+    modelInfer,
+    serverReady: vi.fn().mockResolvedValue(true),
+    modelReady: vi.fn().mockResolvedValue(true),
+    close: vi.fn(),
+  } as unknown as TritonClient
+  return {
+    triton,
+    modelInfer,
+    get inFlight() {
+      return inFlight
+    },
+    get maxInFlight() {
+      return maxInFlight
+    },
+    get pendingCount() {
+      return pending.length
+    },
+    releaseOne() {
+      pending.shift()?.()
+    },
+  }
 }
 
 function fillRegistry(behaviors: StubBehavior[]) {
@@ -362,5 +405,75 @@ describe('dispatchAll', () => {
     // EIGHT_KEYS[2] is 'seth'
     expect(modelErrors['seth']?.code).toBe('SHAPE_MISMATCH')
     expect(modelErrors['seth']?.message).toBe('wrong shape')
+  })
+})
+
+describe('dispatchAll concurrency bound', () => {
+  beforeEach(() => {
+    fillRegistry(
+      EIGHT_KEYS.map(() => ({
+        mode: 'succeed' as const,
+        result: { ok: true },
+      })),
+    )
+  })
+
+  it('never exceeds the limit across simultaneous dispatchAll invocations', async () => {
+    const sem = createSemaphore(2)
+    const gated = makeGatedTriton()
+
+    const p1 = dispatchAll(gated.triton, CTX, { semaphore: sem })
+    const p2 = dispatchAll(gated.triton, CTX, { semaphore: sem })
+
+    await flush()
+    expect(gated.inFlight).toBe(2)
+
+    while (gated.pendingCount > 0) {
+      gated.releaseOne()
+      await flush()
+    }
+    await Promise.all([p1, p2])
+
+    expect(gated.maxInFlight).toBe(2)
+    expect(sem.available).toBe(2)
+  })
+
+  it('releases a permit when modelInfer throws (no leak)', async () => {
+    const sem = createSemaphore(4)
+    const triton = {
+      modelInfer: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('down'), { code: 14 })),
+      serverReady: vi.fn().mockResolvedValue(true),
+      modelReady: vi.fn().mockResolvedValue(true),
+      close: vi.fn(),
+    } as unknown as TritonClient
+
+    const { outputs, modelErrors } = await dispatchAll(triton, CTX, {
+      semaphore: sem,
+    })
+
+    expect(Object.keys(outputs).length).toBe(0)
+    expect(Object.keys(modelErrors).length).toBe(8)
+    expect(sem.available).toBe(4)
+  })
+
+  it('makes excess calls wait rather than opening immediately', async () => {
+    const sem = createSemaphore(3)
+    const gated = makeGatedTriton()
+
+    const p = dispatchAll(gated.triton, CTX, { semaphore: sem })
+    await flush()
+
+    expect(gated.modelInfer).toHaveBeenCalledTimes(3)
+    expect(gated.inFlight).toBe(3)
+
+    while (gated.pendingCount > 0) {
+      gated.releaseOne()
+      await flush()
+    }
+    await p
+
+    expect(gated.modelInfer).toHaveBeenCalledTimes(8)
   })
 })

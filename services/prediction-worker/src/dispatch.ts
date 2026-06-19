@@ -6,11 +6,15 @@ import type {
   WorkerMetrics,
 } from '@protifer/shared'
 import { DEFAULT_DEADLINE_MS } from '@protifer/triton-client'
-import type { TritonClient } from '@protifer/triton-client'
+import type {
+  ModelInferRetryOptions,
+  TritonClient,
+} from '@protifer/triton-client'
 
 import { ShapeError, DtypeError, DecodeError } from './adapters/errors.ts'
 import { ADAPTER_REGISTRY } from './adapters/index.ts'
 import type { AdapterContext, ModelAdapter } from './adapters/types.ts'
+import type { Semaphore } from './semaphore.ts'
 
 const MAX_MESSAGE_LEN = 200
 
@@ -84,13 +88,33 @@ function truncate(s: string): string {
  *
  * No per-model retries; BullMQ whole-job retry handles transients.
  */
+async function withPermit<T>(
+  semaphore: Semaphore | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!semaphore) return fn()
+  const release = await semaphore.acquire()
+  try {
+    return await fn()
+  } finally {
+    release()
+  }
+}
+
 export async function dispatchAll(
   triton: TritonClient,
   ctx: AdapterContext,
   {
     deadlineMs = DEFAULT_DEADLINE_MS,
     metrics,
-  }: { deadlineMs?: number; metrics?: WorkerMetrics } = {},
+    semaphore,
+    retry,
+  }: {
+    deadlineMs?: number
+    metrics?: WorkerMetrics
+    semaphore?: Semaphore
+    retry?: ModelInferRetryOptions
+  } = {},
 ): Promise<{ outputs: PredictionOutputs; modelErrors: ModelErrors }> {
   const adapters = Object.values(ADAPTER_REGISTRY) as ModelAdapter[]
 
@@ -101,7 +125,9 @@ export async function dispatchAll(
       })
       try {
         const req = adapter.buildRequest(ctx)
-        const resp = await triton.modelInfer(req, { deadlineMs })
+        const resp = await withPermit(semaphore, () =>
+          triton.modelInfer(req, { deadlineMs, retry }),
+        )
         const decoded = adapter.decodeResponse(resp)
         endTimer?.({ status: 'success' })
         return { adapter, decoded }
