@@ -23,7 +23,7 @@
 
 ## 5. Finalize pipeline.js (after prediction-latency-observability + fix-shedding-residue-leak)
 
-- [ ] 5.1 Remove the concurrent-cap 429 back-off path; size VUs ≤ the pro concurrent-job cap (read from env, conservative default; source the cap from `packages/shared/src/plan.ts`).
+- [ ] 5.1 Remove the concurrent-cap 429 back-off path; size VUs ≤ the pro concurrent-job cap (read from env, conservative default; the cap is now per-account resolved `EffectiveLimits` from `per-account-limit-overrides`, not a static `PLAN_LIMITS[plan]`).
 - [ ] 5.2 Treat an unexpected cap-429 as a failed check ("run mis-sized — lower VUs"), not a tolerated outcome.
 - [ ] 5.3 Trim in-script measurement to client-perceived `e2e_latency` + `submit_latency`; document that per-model latency / drain are read from `/metrics` (`triton_model_infer_duration_seconds`, `shedding_residues_per_second`, queue depth).
 - [ ] 5.4 Header documents this doubles as the `bound-prediction-fanout` tuning harness.
@@ -33,11 +33,15 @@
 - [ ] 6.1 Rename/replace `tests/load/shedding.js` → `tests/load/saturate.js`; keep over-cap ramp + 503 tolerance + mixed lengths.
 - [ ] 6.2 Update the calibration note to read the now-trustworthy `shedding_residues_per_second` aggregate drain rate.
 - [ ] 6.3 Header documents this is the ONLY 503/shedding coverage and is run on demand only (rare tier).
+- [ ] 6.4 Provision a dedicated saturation account on prod with a tight `sloSeconds` override (`user.limits`, via `PUT /admin/accounts/{userId}/limits`) so shedding trips at low, deterministic load; inject its bearer plus an admin bearer via env.
+- [ ] 6.5 In the run, enable enforce via `PUT /admin/flags/shedding.enforce` (effective ≤ flag cache window), assert ≥1 `503`+`Retry-After` under sustained over-cap load, then revert (clear the flag override + the account override); a run with zero 503s fails.
+- [ ] 6.6 Assert the configurability round-trip: with enforce off, the same over-cap load admits (202) within the flag cache window.
 
 ## 7. Verification
 
 - [ ] 7.1 `K6_SMOKE=true` syntax-validate every script (`admission.js`, `pipeline.js`, `saturate.js`).
 - [ ] 7.2 Run `admission.js` against prod: free-plan 429 fires with header, pro cached submits non-5xx, no real inference triggered.
 - [ ] 7.3 Run `pipeline.js` under the cap: jobs reach terminal state, no cap-429, and confirm `submissions_total` ≈ bullmq enqueued ≈ completed (accounting gap closed/visible).
-- [ ] 7.4 Run `saturate.js`: 503s tolerated, `shedding_residues_per_second` readable at steady state.
+- [ ] 7.4 Run `saturate.js` with enforce on: ≥1 `503`+`Retry-After` observed, 503s tolerated (not failures), `shedding_residues_per_second` readable at steady state; enforce reverted on completion.
+- [ ] 7.6 Confirm the per-account `sloSeconds` override drives the shed threshold (the saturation account sheds where a plan-default account would not at the same load).
 - [ ] 7.5 Repo gates: `bun run lint` (k6 scripts are `.js`, eslint-only), `bun run typecheck`/`test` for the gateway counter change.

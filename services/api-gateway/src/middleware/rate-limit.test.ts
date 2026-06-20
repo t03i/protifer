@@ -77,10 +77,23 @@ beforeEach(async () => {
 function makeAuthApp(
   plan: AuthContext['plan'],
   rateLimiter: ReturnType<typeof createSubmissionRateLimiter>,
+  submissionsPerMinute?: number,
 ) {
+  const spm = submissionsPerMinute ?? PLAN_LIMITS[plan].submissionsPerMinute
   const app = new OpenAPIHono<{ Variables: Variables }>()
   app.use('*', (c, next) => {
-    c.set('auth', { sub: 'user-001', email: 'u@test.com', plan })
+    c.set('auth', {
+      sub: 'user-001',
+      email: 'u@test.com',
+      plan,
+      limits: {
+        submissionsPerMinute: spm,
+        maxConcurrentJobs: 2,
+        maxSequenceLength: 4096,
+        sloSeconds: 30,
+      },
+      method: 'session',
+    })
     return next()
   })
   app.use('*', rateLimiter)
@@ -129,13 +142,11 @@ describe('createSubmissionRateLimiter', () => {
     )
   })
 
-  it('honors a configured per-plan submissions ceiling', async () => {
+  it('honors the resolved per-account submissions ceiling', async () => {
     const app = makeAuthApp(
       'free',
-      createSubmissionRateLimiter({
-        connection,
-        submissionsPerMinute: { free: 999, pro: 60, enterprise: 300 },
-      }),
+      createSubmissionRateLimiter({ connection }),
+      999,
     )
     const res = await app.request('/test')
     expect(res.headers.get('ratelimit-policy')).toContain('999')

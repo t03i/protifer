@@ -3,9 +3,11 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import { OpenFeature } from '@openfeature/server-sdk'
 import type {
   AuthContext,
+  EffectiveLimits,
   FlagOverrideStore,
   Logger,
   ObjectStore,
+  Plan,
   PredictionSuiteConfig,
   Redis,
 } from '@protifer/shared'
@@ -13,6 +15,8 @@ import {
   AppError,
   CachedFlagOverrideStore,
   FLAG_REGISTRY,
+  MAX_SEQUENCE_LENGTH,
+  PLAN_LIMITS,
   QUEUE_NAMES,
   QueueEvents,
   RedisFlagOverrideStore,
@@ -36,6 +40,7 @@ import pino from 'pino'
 import { createBullBoardRouter } from './admin/bull-board.ts'
 import { createCleanupAdminRouter } from './admin/cleanup.ts'
 import { createFlagsAdminRouter, createFlagsProvider } from './admin/flags.ts'
+import { createLimitsAdminRouter } from './admin/limits.ts'
 import { createSheddingAdminRouter } from './admin/shedding.ts'
 import { createAuth } from './auth/index.ts'
 import { createUserDirectory } from './auth/user-directory.ts'
@@ -280,24 +285,40 @@ export function createApp(overrides?: {
     sharedPool,
   )
   const userDirectory = createUserDirectory(sharedPool)
+  const planClassDefaults: Record<Plan, EffectiveLimits> = {
+    free: {
+      submissionsPerMinute: config.rateLimit.submissionsFree,
+      maxConcurrentJobs: PLAN_LIMITS.free.maxConcurrentJobs,
+      maxSequenceLength: MAX_SEQUENCE_LENGTH,
+      sloSeconds: sheddingConfig.sloSeconds.free,
+    },
+    pro: {
+      submissionsPerMinute: config.rateLimit.submissionsPro,
+      maxConcurrentJobs: PLAN_LIMITS.pro.maxConcurrentJobs,
+      maxSequenceLength: MAX_SEQUENCE_LENGTH,
+      sloSeconds: sheddingConfig.sloSeconds.pro,
+    },
+    enterprise: {
+      submissionsPerMinute: config.rateLimit.submissionsEnterprise,
+      maxConcurrentJobs: PLAN_LIMITS.enterprise.maxConcurrentJobs,
+      maxSequenceLength: MAX_SEQUENCE_LENGTH,
+      sloSeconds: sheddingConfig.sloSeconds.enterprise,
+    },
+  }
   const planResolver = new DbPlanResolver({
     logger,
+    classDefaults: planClassDefaults,
     getUser: async (userId) => {
-      const result = await sharedPool.query<{ plan?: string }>(
-        'SELECT plan FROM "user" WHERE id = $1 LIMIT 1',
-        [userId],
-      )
+      const result = await sharedPool.query<{
+        plan?: string
+        limits?: unknown
+      }>('SELECT plan, limits FROM "user" WHERE id = $1 LIMIT 1', [userId])
       return result.rows[0] ?? null
     },
   })
   const rateLimitConnection = connection as unknown as Redis
   const submissionRL = createSubmissionRateLimiter({
     connection: rateLimitConnection,
-    submissionsPerMinute: {
-      free: config.rateLimit.submissionsFree,
-      pro: config.rateLimit.submissionsPro,
-      enterprise: config.rateLimit.submissionsEnterprise,
-    },
   })
   const pollRL = createPollRateLimiter({ connection: rateLimitConnection })
 
@@ -417,6 +438,26 @@ export function createApp(overrides?: {
   app.route(
     '/admin/flags',
     createFlagsAdminRouter({ registry: FLAG_REGISTRY, store: flagsStore }),
+  )
+  app.route(
+    '/admin',
+    createLimitsAdminRouter({
+      logger,
+      setLimits: async (userId, limits) => {
+        const result = await sharedPool.query(
+          'UPDATE "user" SET limits = $1::jsonb WHERE id = $2',
+          [JSON.stringify(limits), userId],
+        )
+        return result.rowCount ?? 0
+      },
+      clearLimits: async (userId) => {
+        const result = await sharedPool.query(
+          'UPDATE "user" SET limits = NULL WHERE id = $1',
+          [userId],
+        )
+        return result.rowCount ?? 0
+      },
+    }),
   )
   if (serveStatic) {
     // Bull Board ships its own static asset bundle; only mount when the

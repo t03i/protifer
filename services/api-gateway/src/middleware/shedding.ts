@@ -132,6 +132,7 @@ export function createSheddingMiddleware(deps: SheddingMiddlewareDeps) {
       state: snapshot,
       config,
       plan: auth.plan,
+      sloSeconds: auth.limits.sloSeconds,
       sequenceResidues: residues,
       nowMs: now(),
     })

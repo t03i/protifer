@@ -1,5 +1,4 @@
-import { PLAN_LIMITS } from '@protifer/shared'
-import type { Plan } from '@protifer/shared'
+import type { EffectiveLimits } from '@protifer/shared'
 import type { Context } from 'hono'
 
 import { ACTIVE_JOBS_KEY } from '../cleanup.ts'
@@ -17,10 +16,10 @@ export const DEFAULT_TIMEOUT_MS = 2_000
 export async function withinConcurrentJobLimit(
   c: Context,
   redis: RedisCommands,
-  auth: { sub: string; plan: Plan },
+  auth: { sub: string; limits: EffectiveLimits },
 ): Promise<boolean> {
   const concurrentCount = await redis.zcard(ACTIVE_JOBS_KEY(auth.sub))
-  const { maxConcurrentJobs } = PLAN_LIMITS[auth.plan]
+  const { maxConcurrentJobs } = auth.limits
   if (concurrentCount >= maxConcurrentJobs) {
     c.header('X-RateLimit-Concurrent', String(concurrentCount))
     return false

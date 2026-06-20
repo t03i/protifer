@@ -1,14 +1,19 @@
 import { z } from '@hono/zod-openapi'
-import { MAX_SEQUENCE_LENGTH } from '@protifer/shared'
+import { MAX_SEQUENCE_LENGTH_CAP } from '@protifer/shared'
 
-/** Shared submit body (sequence + optional accession). Domains attach their own `.openapi()` label. */
+/**
+ * Shared submit body (sequence + optional accession). The static `.max()` is
+ * the absolute hard ceiling; the per-account resolved `maxSequenceLength` is
+ * enforced per request in the route handlers. Domains attach their own
+ * `.openapi()` label.
+ */
 export const SubmitBodySchema = z.object({
   sequence: z
     .string()
     .min(1, 'sequence is required and must be non-empty')
     .max(
-      MAX_SEQUENCE_LENGTH,
-      `sequence must be at most ${String(MAX_SEQUENCE_LENGTH)} residues`,
+      MAX_SEQUENCE_LENGTH_CAP,
+      `sequence must be at most ${String(MAX_SEQUENCE_LENGTH_CAP)} residues`,
     )
     .openapi({ example: 'MKTVRQERLK' }),
   accession: z.string().optional().openapi({

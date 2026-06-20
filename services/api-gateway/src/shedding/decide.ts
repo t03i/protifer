@@ -15,6 +15,8 @@ export interface DecideInput {
   state: SheddingStateSnapshot
   config: SheddingConfig
   plan: Plan
+  /** Account's resolved SLO seconds; falls back to `config.sloSeconds[plan]`. */
+  sloSeconds?: number
   sequenceResidues: number
   nowMs: number
   jitter?: () => number
@@ -79,7 +81,7 @@ export function decideAdmission(input: DecideInput): AdmissionDecision {
     }
   }
 
-  const slo = config.sloSeconds[plan]
+  const slo = input.sloSeconds ?? config.sloSeconds[plan]
   if (slo === 0) {
     return { admit: true, estimatedWaitSeconds }
   }

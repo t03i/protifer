@@ -1,11 +1,14 @@
 import { z } from 'zod'
 
+import type { EffectiveLimits } from './plan.ts'
+
 export type Plan = 'free' | 'pro' | 'enterprise'
 
 export interface AuthContext {
   sub: string
   email: string
   plan: Plan
+  limits: EffectiveLimits
   method: 'api-key' | 'session'
   role?: 'admin' | 'user'
 }

@@ -1,8 +1,22 @@
+import { z } from 'zod'
+
 import { zBooleanString } from './config.ts'
 import type { Plan } from './types.ts'
 
+export interface EffectiveLimits {
+  submissionsPerMinute: number
+  maxConcurrentJobs: number
+  maxSequenceLength: number
+  sloSeconds: number
+}
+
+export interface ResolvedAccount {
+  plan: Plan
+  limits: EffectiveLimits
+}
+
 export interface PlanResolver {
-  resolve(userId: string, email: string): Promise<Plan>
+  resolve(userId: string, email: string): Promise<ResolvedAccount>
 }
 
 export const PLAN_LIMITS: Record<
@@ -26,6 +40,50 @@ export const PLAN_LIMITS: Record<
  * multi-MB payloads from tying up a GPU.
  */
 export const MAX_SEQUENCE_LENGTH = 4096
+
+/**
+ * Absolute upper bound an account override may raise `maxSequenceLength` to.
+ * The static submit schema rejects above this; the per-account resolved limit
+ * (default `MAX_SEQUENCE_LENGTH`) is enforced per request below the cap.
+ */
+export const MAX_SEQUENCE_LENGTH_CAP = 16384
+
+/**
+ * Sparse per-account override of {@link EffectiveLimits}. Each present field
+ * replaces the plan-class default; absent fields fall back. `.strict()`
+ * rejects unknown keys; `.max()` caps guard against widening beyond infra.
+ */
+export const OverrideLimitsSchema = z
+  .object({
+    submissionsPerMinute: z.number().int().positive().max(100_000).optional(),
+    maxConcurrentJobs: z.number().int().positive().max(10_000).optional(),
+    maxSequenceLength: z
+      .number()
+      .int()
+      .positive()
+      .max(MAX_SEQUENCE_LENGTH_CAP)
+      .optional(),
+    sloSeconds: z.number().int().min(0).max(86_400).optional(),
+  })
+  .strict()
+
+export type LimitsOverride = z.infer<typeof OverrideLimitsSchema>
+
+export function mergeLimits(
+  classDefaults: EffectiveLimits,
+  override?: LimitsOverride | null,
+): EffectiveLimits {
+  if (!override) return { ...classDefaults }
+  return {
+    submissionsPerMinute:
+      override.submissionsPerMinute ?? classDefaults.submissionsPerMinute,
+    maxConcurrentJobs:
+      override.maxConcurrentJobs ?? classDefaults.maxConcurrentJobs,
+    maxSequenceLength:
+      override.maxSequenceLength ?? classDefaults.maxSequenceLength,
+    sloSeconds: override.sloSeconds ?? classDefaults.sloSeconds,
+  }
+}
 
 /**
  * BullMQ job priority per plan — lower integer = higher priority

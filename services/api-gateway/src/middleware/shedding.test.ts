@@ -83,7 +83,18 @@ function makeApp({
   const app = new Hono<{ Variables: Variables }>()
   if (auth) {
     app.use('*', async (c, next) => {
-      c.set('auth', { sub: 'u1', email: 'u1@x.com', plan })
+      c.set('auth', {
+        sub: 'u1',
+        email: 'u1@x.com',
+        plan,
+        limits: {
+          submissionsPerMinute: 10,
+          maxConcurrentJobs: 2,
+          maxSequenceLength: 4096,
+          sloSeconds: config.sloSeconds[plan],
+        },
+        method: 'session',
+      })
       await next()
     })
   }
@@ -276,7 +287,18 @@ describe('createSheddingMiddleware', () => {
     })
     const app = new Hono<{ Variables: Variables }>()
     app.use('*', async (c, next) => {
-      c.set('auth', { sub: 'u1', email: 'u1@x.com', plan: 'free' })
+      c.set('auth', {
+        sub: 'u1',
+        email: 'u1@x.com',
+        plan: 'free',
+        limits: {
+          submissionsPerMinute: 10,
+          maxConcurrentJobs: 2,
+          maxSequenceLength: 4096,
+          sloSeconds: config.sloSeconds.free,
+        },
+        method: 'session',
+      })
       await next()
     })
     app.use('*', middleware)

@@ -15,7 +15,17 @@ import type { RedisCommands } from '../queue.ts'
 import { createPredictionsRouter } from '../routes/predictions.ts'
 import type { Variables } from '../types/hono.ts'
 
-const proResolver: PlanResolver = { resolve: vi.fn().mockResolvedValue('pro') }
+const proResolver: PlanResolver = {
+  resolve: vi.fn().mockResolvedValue({
+    plan: 'pro' as const,
+    limits: {
+      submissionsPerMinute: 60,
+      maxConcurrentJobs: 10,
+      maxSequenceLength: 4096,
+      sloSeconds: 120,
+    },
+  }),
+}
 
 const mockAuth = {
   api: {

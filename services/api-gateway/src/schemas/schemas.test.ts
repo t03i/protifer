@@ -1,4 +1,4 @@
-import { MAX_SEQUENCE_LENGTH } from '@protifer/shared'
+import { MAX_SEQUENCE_LENGTH_CAP } from '@protifer/shared'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -27,14 +27,14 @@ describe('PredictionSubmitBodySchema', () => {
   it('accepts a sequence at the max length', () => {
     expect(
       PredictionSubmitBodySchema.safeParse({
-        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH),
+        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH_CAP),
       }).success,
     ).toBe(true)
   })
   it('rejects a sequence longer than the max length', () => {
     expect(
       PredictionSubmitBodySchema.safeParse({
-        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH + 1),
+        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH_CAP + 1),
       }).success,
     ).toBe(false)
   })
@@ -54,14 +54,14 @@ describe('EmbeddingSubmitBodySchema', () => {
   it('accepts a sequence at the max length', () => {
     expect(
       EmbeddingSubmitBodySchema.safeParse({
-        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH),
+        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH_CAP),
       }).success,
     ).toBe(true)
   })
   it('rejects a sequence longer than the max length', () => {
     expect(
       EmbeddingSubmitBodySchema.safeParse({
-        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH + 1),
+        sequence: 'A'.repeat(MAX_SEQUENCE_LENGTH_CAP + 1),
       }).success,
     ).toBe(false)
   })

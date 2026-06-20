@@ -2,11 +2,16 @@ import { describe, it, expect } from 'vitest'
 
 import {
   DEFAULT_PLAN_PRIORITY,
+  MAX_SEQUENCE_LENGTH,
+  MAX_SEQUENCE_LENGTH_CAP,
+  OverrideLimitsSchema,
   PLAN_LIMITS,
   SHEDDING_DEFAULTS,
   loadSheddingConfig,
+  mergeLimits,
   parseBoolean,
 } from './plan.ts'
+import type { EffectiveLimits } from './plan.ts'
 
 describe('parseBoolean', () => {
   it('returns the fallback when the value is undefined', () => {
@@ -33,6 +38,56 @@ describe('PLAN_LIMITS', () => {
     expect(PLAN_LIMITS.free.submissionsPerMinute).toBe(10)
     expect(PLAN_LIMITS.pro.submissionsPerMinute).toBe(60)
     expect(PLAN_LIMITS.enterprise.submissionsPerMinute).toBe(300)
+  })
+})
+
+describe('OverrideLimitsSchema', () => {
+  it('accepts a sparse override', () => {
+    const r = OverrideLimitsSchema.safeParse({ maxConcurrentJobs: 25 })
+    expect(r.success).toBe(true)
+  })
+
+  it('rejects negative, non-integer, and over-cap values', () => {
+    expect(
+      OverrideLimitsSchema.safeParse({ maxConcurrentJobs: -1 }).success,
+    ).toBe(false)
+    expect(
+      OverrideLimitsSchema.safeParse({ submissionsPerMinute: 1.5 }).success,
+    ).toBe(false)
+    expect(
+      OverrideLimitsSchema.safeParse({
+        maxSequenceLength: MAX_SEQUENCE_LENGTH_CAP + 1,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('allows sloSeconds of zero', () => {
+    expect(OverrideLimitsSchema.safeParse({ sloSeconds: 0 }).success).toBe(true)
+  })
+
+  it('rejects unknown fields', () => {
+    expect(OverrideLimitsSchema.safeParse({ bogus: 1 }).success).toBe(false)
+  })
+})
+
+describe('mergeLimits', () => {
+  const defaults: EffectiveLimits = {
+    submissionsPerMinute: 10,
+    maxConcurrentJobs: 2,
+    maxSequenceLength: MAX_SEQUENCE_LENGTH,
+    sloSeconds: 30,
+  }
+
+  it('returns defaults when no override', () => {
+    expect(mergeLimits(defaults, null)).toEqual(defaults)
+    expect(mergeLimits(defaults, undefined)).toEqual(defaults)
+  })
+
+  it('merges a partial override field-by-field', () => {
+    expect(mergeLimits(defaults, { maxConcurrentJobs: 25 })).toEqual({
+      ...defaults,
+      maxConcurrentJobs: 25,
+    })
   })
 })
 
