@@ -25,6 +25,31 @@ describe('prediction-worker loadConfig', () => {
     expect(Object.isFrozen(cfg)).toBe(true)
   })
 
+  it('applies conservative defaults for the fan-out tunables', () => {
+    const cfg = loadConfig(VALID_ENV)
+    expect(cfg.triton.maxInflightInfers).toBe(8)
+    expect(cfg.triton.retryMaxAttempts).toBe(3)
+    expect(cfg.triton.retryBaseBackoffMs).toBe(100)
+  })
+
+  it('parses env overrides for the fan-out tunables', () => {
+    const cfg = loadConfig({
+      ...VALID_ENV,
+      TRITON_MAX_INFLIGHT_INFERS: '16',
+      TRITON_RETRY_MAX_ATTEMPTS: '5',
+      TRITON_RETRY_BASE_BACKOFF_MS: '250',
+    })
+    expect(cfg.triton.maxInflightInfers).toBe(16)
+    expect(cfg.triton.retryMaxAttempts).toBe(5)
+    expect(cfg.triton.retryBaseBackoffMs).toBe(250)
+  })
+
+  it('rejects a non-positive concurrency limit', () => {
+    expect(() =>
+      loadConfig({ ...VALID_ENV, TRITON_MAX_INFLIGHT_INFERS: '0' }),
+    ).toThrow()
+  })
+
   it('aggregates missing required fields into one error', () => {
     expect.assertions(2)
     try {

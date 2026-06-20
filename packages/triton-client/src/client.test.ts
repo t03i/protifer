@@ -179,3 +179,169 @@ describe('modelInfer deadline enforcement', () => {
     expect(response.model_name).toBe('test')
   }, 10_000)
 })
+
+type Step = 'ok' | { code: number; details: string }
+
+/** Start a gRPC server that walks `plan` per modelInfer call (last step repeats). */
+async function startFlakyTritonServer(plan: Step[]): Promise<{
+  stop(): void
+  port: number
+  calls(): number
+}> {
+  const proto = getPackageDef()
+  const server = new grpc.Server()
+  let calls = 0
+
+  server.addService(proto.inference.GRPCInferenceService.service, {
+    serverReady: (
+      _: grpc.ServerUnaryCall<unknown, unknown>,
+      cb: grpc.sendUnaryData<object>,
+    ) => {
+      cb(null, { ready: true })
+    },
+    modelReady: (
+      _: grpc.ServerUnaryCall<unknown, unknown>,
+      cb: grpc.sendUnaryData<object>,
+    ) => {
+      cb(null, { ready: true })
+    },
+    modelInfer: (
+      _: grpc.ServerUnaryCall<unknown, unknown>,
+      cb: grpc.sendUnaryData<object>,
+    ) => {
+      const step = plan[Math.min(calls, plan.length - 1)] ?? 'ok'
+      calls++
+      if (step === 'ok') {
+        cb(null, { model_name: 'test', outputs: [], raw_output_contents: [] })
+      } else {
+        cb(
+          { code: step.code, details: step.details } as grpc.ServiceError,
+          null,
+        )
+      }
+    },
+  })
+
+  return new Promise((resolve, reject) => {
+    server.bindAsync(
+      '0.0.0.0:0',
+      grpc.ServerCredentials.createInsecure(),
+      (err: Error | null, boundPort: number) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        resolve({
+          stop: () => {
+            server.forceShutdown()
+          },
+          port: boundPort,
+          calls: () => calls,
+        })
+      },
+    )
+  })
+}
+
+const FAST_RETRY = { maxAttempts: 3, baseBackoffMs: 1 }
+
+describe('modelInfer transient-transport retry', () => {
+  const cleanups: Array<() => void> = []
+
+  afterAll(() => {
+    for (const fn of cleanups) fn()
+  })
+
+  async function makeClient(plan: Step[]) {
+    const srv = await startFlakyTritonServer(plan)
+    const client = createTritonClient(`localhost:${srv.port.toString()}`)
+    cleanups.push(() => {
+      srv.stop()
+      client.close()
+    })
+    return { srv, client }
+  }
+
+  const REQ = { model_name: 'test', inputs: [], outputs: [] }
+
+  it('retries on UNAVAILABLE and succeeds after a transient drop', async () => {
+    const { srv, client } = await makeClient([
+      { code: grpc.status.UNAVAILABLE, details: 'Connection dropped' },
+      { code: grpc.status.UNAVAILABLE, details: 'Connection dropped' },
+      'ok',
+    ])
+    const resp = await client.modelInfer(REQ, { retry: FAST_RETRY })
+    expect(resp.model_name).toBe('test')
+    expect(srv.calls()).toBe(3)
+  }, 10_000)
+
+  it('retries on transport-class INTERNAL (bandwidth exhausted)', async () => {
+    const { srv, client } = await makeClient([
+      {
+        code: grpc.status.INTERNAL,
+        details: 'Bandwidth exhausted or memory limit exceeded',
+      },
+      'ok',
+    ])
+    const resp = await client.modelInfer(REQ, { retry: FAST_RETRY })
+    expect(resp.model_name).toBe('test')
+    expect(srv.calls()).toBe(2)
+  }, 10_000)
+
+  it('does not retry a genuine server INTERNAL', async () => {
+    const { srv, client } = await makeClient([
+      {
+        code: grpc.status.INTERNAL,
+        details: 'internal model assertion failed',
+      },
+      'ok',
+    ])
+    await expect(
+      client.modelInfer(REQ, { retry: FAST_RETRY }),
+    ).rejects.toMatchObject({ code: grpc.status.INTERNAL })
+    expect(srv.calls()).toBe(1)
+  }, 10_000)
+
+  it('does not retry INVALID_ARGUMENT', async () => {
+    const { srv, client } = await makeClient([
+      { code: grpc.status.INVALID_ARGUMENT, details: 'bad shape' },
+      'ok',
+    ])
+    await expect(
+      client.modelInfer(REQ, { retry: FAST_RETRY }),
+    ).rejects.toMatchObject({ code: grpc.status.INVALID_ARGUMENT })
+    expect(srv.calls()).toBe(1)
+  }, 10_000)
+
+  it('does not retry NOT_FOUND', async () => {
+    const { srv, client } = await makeClient([
+      { code: grpc.status.NOT_FOUND, details: 'no model' },
+      'ok',
+    ])
+    await expect(
+      client.modelInfer(REQ, { retry: FAST_RETRY }),
+    ).rejects.toMatchObject({ code: grpc.status.NOT_FOUND })
+    expect(srv.calls()).toBe(1)
+  }, 10_000)
+
+  it('does not retry DEADLINE_EXCEEDED (maps to TritonTimeoutError)', async () => {
+    const { srv, client } = await makeClient([
+      { code: grpc.status.DEADLINE_EXCEEDED, details: 'too slow' },
+      'ok',
+    ])
+    await expect(client.modelInfer(REQ, { retry: FAST_RETRY })).rejects.toThrow(
+      TritonTimeoutError,
+    )
+    expect(srv.calls()).toBe(1)
+  }, 10_000)
+
+  it('surfaces the classified error once retries are exhausted', async () => {
+    const { srv, client } = await makeClient([
+      { code: grpc.status.UNAVAILABLE, details: 'Connection dropped' },
+    ])
+    await expect(
+      client.modelInfer(REQ, { retry: { maxAttempts: 2, baseBackoffMs: 1 } }),
+    ).rejects.toMatchObject({ code: grpc.status.UNAVAILABLE })
+    expect(srv.calls()).toBe(2)
+  }, 10_000)
+})

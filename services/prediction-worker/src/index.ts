@@ -15,6 +15,7 @@ import pino from 'pino'
 import { ADAPTER_REGISTRY } from './adapters/index.ts'
 import { loadConfig } from './config.ts'
 import { processPredictionJob } from './processor.ts'
+import { createSemaphore } from './semaphore.ts'
 
 initSentry('prediction-worker')
 
@@ -24,6 +25,11 @@ const logger = pino({ name: 'prediction-worker', ...defaultPinoOptions() })
 const triton = createTritonClient(config.triton.url)
 const store = createObjectStoreFromConfig(config.storage)
 const metrics = createWorkerMetrics()
+const inferSemaphore = createSemaphore(config.triton.maxInflightInfers)
+const inferRetry = {
+  maxAttempts: config.triton.retryMaxAttempts,
+  baseBackoffMs: config.triton.retryBaseBackoffMs,
+}
 
 if (config.metrics.enabled) {
   const metricsServer = startMetricsServer({
@@ -46,6 +52,8 @@ createWorkerApp({
       store,
       deadlineMs: config.triton.deadlineMs,
       metrics,
+      semaphore: inferSemaphore,
+      retry: inferRetry,
     })
   },
   triton,

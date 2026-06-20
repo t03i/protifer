@@ -12,10 +12,14 @@ import {
   DEFAULT_DEADLINE_MS,
   fp16BufferToFp32Array,
 } from '@protifer/triton-client'
-import type { TritonClient } from '@protifer/triton-client'
+import type {
+  ModelInferRetryOptions,
+  TritonClient,
+} from '@protifer/triton-client'
 
 import type { AdapterContext } from './adapters/types.ts'
 import { dispatchAll } from './dispatch.ts'
+import type { Semaphore } from './semaphore.ts'
 
 interface ProcessorDeps {
   triton: TritonClient
@@ -23,6 +27,9 @@ interface ProcessorDeps {
   /** gRPC deadline for Triton modelInfer calls (ms). Defaults to DEFAULT_DEADLINE_MS. */
   deadlineMs?: number
   metrics?: WorkerMetrics
+  /** Process-wide bound on concurrent in-flight modelInfer calls, shared across jobs. */
+  semaphore?: Semaphore
+  retry?: ModelInferRetryOptions
 }
 
 export async function processPredictionJob(
@@ -31,7 +38,14 @@ export async function processPredictionJob(
 ): Promise<PredictionJobResult> {
   const { sequence, sequenceHash, embeddingModel, predictionModels } =
     job.data as PredictionJobData
-  const { triton, store, deadlineMs = DEFAULT_DEADLINE_MS, metrics } = deps
+  const {
+    triton,
+    store,
+    deadlineMs = DEFAULT_DEADLINE_MS,
+    metrics,
+    semaphore,
+    retry,
+  } = deps
 
   await job.updateProgress(10)
 
@@ -71,6 +85,8 @@ export async function processPredictionJob(
   const { outputs, modelErrors } = await dispatchAll(triton, ctx, {
     deadlineMs,
     metrics,
+    semaphore,
+    retry,
   })
   endJobTimer?.({
     status: Object.keys(outputs).length === 0 ? 'failure' : 'success',

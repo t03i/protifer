@@ -4,6 +4,10 @@ import {
   secretField,
   zBooleanString,
 } from '@protifer/shared'
+import {
+  DEFAULT_RETRY_BASE_BACKOFF_MS,
+  DEFAULT_RETRY_MAX_ATTEMPTS,
+} from '@protifer/triton-client'
 import { z } from 'zod'
 
 export const ConfigSchema = defineConfig({
@@ -32,6 +36,27 @@ export const ConfigSchema = defineConfig({
       description: 'Per-request Triton deadline in ms.',
       type: z.coerce.number().int().positive(),
       default: 90_000,
+    }),
+    maxInflightInfers: configField({
+      envName: 'TRITON_MAX_INFLIGHT_INFERS',
+      description:
+        'Max concurrent in-flight Triton modelInfer calls per worker, shared across all jobs. Conservative default; tune up against observed Triton capacity.',
+      type: z.coerce.number().int().positive(),
+      default: 8,
+    }),
+    retryMaxAttempts: configField({
+      envName: 'TRITON_RETRY_MAX_ATTEMPTS',
+      description:
+        'Total modelInfer attempts (incl. first) on transient transport errors. ≤1 disables retry.',
+      type: z.coerce.number().int().positive(),
+      default: DEFAULT_RETRY_MAX_ATTEMPTS,
+    }),
+    retryBaseBackoffMs: configField({
+      envName: 'TRITON_RETRY_BASE_BACKOFF_MS',
+      description:
+        'Base backoff in ms for the jittered transient-retry schedule.',
+      type: z.coerce.number().int().positive(),
+      default: DEFAULT_RETRY_BASE_BACKOFF_MS,
     }),
   },
   redis: {
