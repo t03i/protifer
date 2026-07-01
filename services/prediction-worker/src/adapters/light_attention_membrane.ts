@@ -1,7 +1,11 @@
 import { readFp32Output } from '@protifer/triton-client'
 
 import { ShapeError } from './errors.ts'
-import { argmaxSlice, channelsFirstEmbeddingBuffer } from './tensor-io.ts'
+import {
+  argmaxSlice,
+  channelsFirstEmbeddingBuffer,
+  outputIndexByName,
+} from './tensor-io.ts'
 import type { ModelAdapter } from './types.ts'
 
 // From HannesStark/protein-localization commit 7b0be1e utils/general.py:
@@ -33,7 +37,10 @@ export const lightAttentionMembraneAdapter: ModelAdapter<'light_attention_membra
     },
 
     decodeResponse(response) {
-      const flat = readFp32Output(response, 0)
+      const flat = readFp32Output(
+        response,
+        outputIndexByName(response, 'output'),
+      )
       if (flat.length !== MEMBRANE_LABELS.length) {
         throw new ShapeError(
           `light_attention_membrane: expected ${String(MEMBRANE_LABELS.length)} floats, got ${String(flat.length)}`,

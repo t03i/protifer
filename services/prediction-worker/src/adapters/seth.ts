@@ -1,6 +1,7 @@
 import { readFp32Output } from '@protifer/triton-client'
 
 import { ShapeError } from './errors.ts'
+import { outputIndexByName } from './tensor-io.ts'
 import type { ModelAdapter } from './types.ts'
 
 export const sethAdapter: ModelAdapter<'seth'> = {
@@ -22,7 +23,7 @@ export const sethAdapter: ModelAdapter<'seth'> = {
   },
 
   decodeResponse(response) {
-    const flat = readFp32Output(response, 0)
+    const flat = readFp32Output(response, outputIndexByName(response, 'output'))
     if (flat.length === 0) {
       throw new ShapeError('seth: empty output')
     }

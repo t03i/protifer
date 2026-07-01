@@ -17,6 +17,13 @@ export const TRITON_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
 
 export const DEFAULT_DEADLINE_MS = 60_000
 
+// Readiness probes must NOT inherit the 60s infer deadline: a Triton that is up
+// at TCP but never replies (GPU-driver hang, rolling restart) would otherwise
+// hang serverReady/modelReady indefinitely and block the worker boot gate. A
+// short deadline resolves the probe to `false` (not ready) so the boot loop
+// retries with backoff instead of wedging.
+export const READINESS_DEADLINE_MS = 5_000
+
 export const DEFAULT_RETRY_MAX_ATTEMPTS = 3
 export const DEFAULT_RETRY_BASE_BACKOFF_MS = 100
 
@@ -156,10 +163,12 @@ export function createTritonClient(url: string): TritonClient {
         ) => void
         serverReady: (
           req: Record<string, never>,
+          callOptions: grpc.CallOptions,
           cb: (err: grpc.ServiceError | null, res: { ready: boolean }) => void,
         ) => void
         modelReady: (
           req: { name: string; version: string },
+          callOptions: grpc.CallOptions,
           cb: (err: grpc.ServiceError | null, res: { ready: boolean }) => void,
         ) => void
       }
@@ -235,6 +244,7 @@ export function createTritonClient(url: string): TritonClient {
       return new Promise((resolve) => {
         stub.serverReady(
           {},
+          { deadline: new Date(Date.now() + READINESS_DEADLINE_MS) },
           (err: grpc.ServiceError | null, response: { ready: boolean }) => {
             resolve(!err && response.ready)
           },
@@ -246,6 +256,7 @@ export function createTritonClient(url: string): TritonClient {
       return new Promise((resolve) => {
         stub.modelReady(
           { name, version },
+          { deadline: new Date(Date.now() + READINESS_DEADLINE_MS) },
           (err: grpc.ServiceError | null, response: { ready: boolean }) => {
             resolve(!err && response.ready)
           },

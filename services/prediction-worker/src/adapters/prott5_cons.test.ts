@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { ShapeError } from './errors.ts'
+import { DecodeError, ShapeError } from './errors.ts'
 import { prott5ConsAdapter } from './prott5_cons.ts'
 
 function makeFp32Buffer(values: number[]): Buffer {
@@ -159,6 +159,52 @@ describe('prott5ConsAdapter', () => {
       }
       expect(() => prott5ConsAdapter.decodeResponse(response)).toThrow(
         ShapeError,
+      )
+    })
+
+    it('throws ShapeError on an empty output (0 % 9 === 0 must not pass)', () => {
+      const response = {
+        model_name: 'prott5_cons',
+        outputs: [
+          {
+            name: 'output',
+            datatype: 'FP32',
+            shape: [0, 9],
+            contents: {
+              fp32_contents: [],
+              bytes_contents: [],
+              int64_contents: [],
+            },
+          },
+        ],
+        raw_output_contents: [Buffer.alloc(0)],
+      }
+      expect(() => prott5ConsAdapter.decodeResponse(response)).toThrow(
+        ShapeError,
+      )
+    })
+
+    it('throws DecodeError when the named output is absent (decode-by-name)', () => {
+      const response = {
+        model_name: 'prott5_cons',
+        outputs: [
+          {
+            name: 'wrong_name',
+            datatype: 'FP32',
+            shape: [1, 9],
+            contents: {
+              fp32_contents: [],
+              bytes_contents: [],
+              int64_contents: [],
+            },
+          },
+        ],
+        raw_output_contents: [
+          makeFp32Buffer(Array.from({ length: 9 }, () => 0)),
+        ],
+      }
+      expect(() => prott5ConsAdapter.decodeResponse(response)).toThrow(
+        DecodeError,
       )
     })
   })

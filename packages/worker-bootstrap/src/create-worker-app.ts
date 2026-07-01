@@ -221,6 +221,22 @@ export async function createWorkerApp<D, R>(
     Sentry.captureException(err)
   })
 
+  // Register the drain handler BEFORE the readiness loop: a SIGTERM arriving
+  // during boot (readiness probes are bounded but not instant) must still drain
+  // and exit cleanly rather than wait for SIGKILL. Closing a not-yet-running
+  // worker is a no-op.
+  if (registerSigterm) {
+    process.on('SIGTERM', () => {
+      void (async () => {
+        logger.info('SIGTERM received — draining worker')
+        await worker.close()
+        await closeRedisConnection(connection, logger)
+        triton.close()
+        exit(0)
+      })()
+    })
+  }
+
   for (const model of models) {
     try {
       const ready = await triton.modelReady(model)
@@ -235,18 +251,6 @@ export async function createWorkerApp<D, R>(
       return
     }
     logger.info({ model }, 'ModelReady ok')
-  }
-
-  if (registerSigterm) {
-    process.on('SIGTERM', () => {
-      void (async () => {
-        logger.info('SIGTERM received — draining worker')
-        await worker.close()
-        await closeRedisConnection(connection, logger)
-        triton.close()
-        exit(0)
-      })()
-    })
   }
 
   await worker.run()

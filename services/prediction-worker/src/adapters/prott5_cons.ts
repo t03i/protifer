@@ -1,7 +1,7 @@
 import { readFp32Output } from '@protifer/triton-client'
 
 import { ShapeError } from './errors.ts'
-import { argmaxSlice } from './tensor-io.ts'
+import { argmaxSlice, outputIndexByName } from './tensor-io.ts'
 import type { ModelAdapter } from './types.ts'
 
 const N_CONS_CLASSES = 9
@@ -25,7 +25,13 @@ export const prott5ConsAdapter: ModelAdapter<'prott5_conservation'> = {
   },
 
   decodeResponse(response) {
-    const flat = readFp32Output(response, 0)
+    const flat = readFp32Output(response, outputIndexByName(response, 'output'))
+    // Guard empty BEFORE the modulo: 0 % 9 === 0 would otherwise pass a
+    // missing/empty output through as a valid seqLen=0 prediction (no error,
+    // no log) instead of surfacing the failure. Matches seth/vespag.
+    if (flat.length === 0) {
+      throw new ShapeError('prott5_cons: empty output')
+    }
     if (flat.length % N_CONS_CLASSES !== 0) {
       throw new ShapeError(
         `prott5_cons: length ${String(flat.length)} not divisible by ${String(N_CONS_CLASSES)}`,
