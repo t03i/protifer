@@ -33,6 +33,7 @@ import * as Sentry from '@sentry/node'
 import type { MiddlewareHandler } from 'hono'
 import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
+import { routePath } from 'hono/route'
 import { secureHeaders } from 'hono/secure-headers'
 import { Pool } from 'pg'
 import pino from 'pino'
@@ -642,7 +643,10 @@ fetch('/api/auth/sign-in/social',{method:'POST',credentials:'include',headers:{'
         scope.setTag('plan', auth.plan)
       }
       scope.setTag('http.method', c.req.method)
-      scope.setTag('http.route', new URL(c.req.url).pathname)
+      // Route pattern, not the raw path: `/v1/predictions/:jobId` embeds job
+      // hashes, so the literal path would explode Sentry tag cardinality and
+      // break issue grouping. Matches middleware/metrics + request-context.
+      scope.setTag('http.route', routePath(c))
       if (corr) {
         scope.setTag('request_id', corr.requestId)
         scope.setTag('trace_id', corr.traceId)

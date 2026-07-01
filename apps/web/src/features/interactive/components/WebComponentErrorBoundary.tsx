@@ -1,5 +1,7 @@
 import React from 'react'
 
+import { logger } from '#/lib/logger'
+
 interface Props {
   children: React.ReactNode
   fallback: string
@@ -10,6 +12,12 @@ export class WebComponentErrorBoundary extends React.Component<Props> {
 
   static getDerivedStateFromError() {
     return { failed: true }
+  }
+
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
+    logger.error('web-component render error', error, {
+      componentStack: info.componentStack,
+    })
   }
 
   override render() {

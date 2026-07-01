@@ -159,6 +159,51 @@ groups:
             Triton or worker slowness (docker compose logs on the app-tier
             host).
 
+  - name: heartbeat
+    # Dead-man's switch for the metrics pipeline itself. Every other rule is
+    # rate()/threshold-based over LIVE series, so if Alloy crashes, its
+    # remote-write token expires, egress breaks, or a scrape target goes dark,
+    # those rules silently stop evaluating instead of firing. `up` is emitted
+    # per scrape target by each host's Alloy; `up==0` catches a dead target
+    # while the agent lives, `absent(up{...})` catches the agent / remote-write
+    # dying entirely (the series stops arriving at Mimir). Better Stack covers
+    # total gateway outage from outside; this covers "monitoring went blind".
+    rules:
+      - alert: ScrapeTargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+          app: protifer
+        annotations:
+          summary: 'protifer: scrape target {{ $labels.job }} down (up==0)'
+          description: |
+            Alloy is scraping {{ $labels.job }} on host {{ $labels.host }} but
+            the target returns no metrics. Check the container is up
+            (docker compose ps) and its /metrics endpoint responds.
+
+      - alert: MetricsPipelineBlind
+        # One vector per host-tier job. absent() returns 1 when the series is
+        # missing from Mimir — i.e. that host's Alloy stopped shipping. This is
+        # the rule that fires when NO other rule can (nothing is ingesting).
+        expr: |
+          absent(up{job="protifer-api-gateway"})
+          or absent(up{job="protifer-triton"})
+          or absent(up{job="protifer-garage"})
+        for: 10m
+        labels:
+          severity: critical
+          app: protifer
+        annotations:
+          summary: 'protifer: a monitoring tier has stopped shipping metrics'
+          description: |
+            No `up` series is arriving for at least one core job
+            (api-gateway / triton / garage) for 10m — the host's Alloy agent,
+            its remote-write, or egress to Grafana Cloud is down. All other
+            alerts on that tier are now blind. Check the Alloy container and
+            prometheus_remote_write_* self-metrics on the affected host; run
+            the delivery smoke check (scripts/smoke-monitoring.sh).
+
   - name: cardinality
     rules:
       - alert: ActiveSeriesNearFreeTierCap
